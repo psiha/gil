@@ -96,12 +96,14 @@ struct packed_view_gp_format
     };
 };
 
+
 template <class View>
 struct view_gp_format
     :
-    mpl::eval_if
+    mpl::eval_if_c
     <
-        is_reference<typename View::reference>,
+        // Err, an 'official' way to detect this?
+        ( mpl::size<typename View::value_type::layout_t::channel_mapping_t>::value <= sizeof( typename View::value_type ) ),
         mpl::identity<unpacked_view_gp_format>,
         mpl::identity<  packed_view_gp_format>
     >::type::apply<View>::type
@@ -261,7 +263,6 @@ public:
     template <class View>
     explicit gp_bitmap( View & view )
     {
-        BOOST_STATIC_ASSERT( is_supported<view_gp_format<View>::value>::value );
         // http://msdn.microsoft.com/en-us/library/ms536315(VS.85).aspx
         // stride has to be a multiple of 4 bytes
         BOOST_ASSERT( !( view.pixels().row_size() % sizeof( Gdiplus::ARGB ) ) );
@@ -274,7 +275,7 @@ public:
                 view.height(),
                 view.pixels().row_size(),
                 view_gp_format<View>::value,
-                interleaved_view_get_raw_data( view ),
+                get_raw_data( view ),
                 &pBitmap_
             )
         );
@@ -335,8 +336,6 @@ public:
     template <typename View, typename CC>
     void convert_to_prepared_view( View const & view, CC const & converter ) const
     {
-        BOOST_STATIC_ASSERT( is_supported<view_gp_format<View>::value>::value );
-
         BOOST_ASSERT( !dimensions_mismatch( view ) );
 
         using namespace Gdiplus;
@@ -409,14 +408,47 @@ public:
         convert_to_prepared_view( view );
     }
 
-    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_encoder() ); }
-    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_encoder() ); }
+    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
+    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
 
 private:
-    static CLSID const & png_encoder()
+    static CLSID const & png_codec()
     {
-        static CLSID const PNG_CLSID = { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return PNG_CLSID;
+        static CLSID const clsid = { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & jpg_codec()
+    {
+        static CLSID const clsid = { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & tiff_codec()
+    {
+        static CLSID const clsid = { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & gif_codec()
+    {
+        static CLSID const clsid = { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & bmp_codec()
+    {
+        static CLSID const clsid = { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+
+    template <typename View>
+    static BYTE * get_raw_data( View const & view )
+    {
+        // A private implementation of interleaved_view_get_raw_data() that
+        // works with packed pixel views.
+        BOOST_STATIC_ASSERT((!is_planar<View>::value /*&& view_is_basic<View>::value*/));
+        BOOST_STATIC_ASSERT((boost::is_pointer<typename View::x_iterator>::value));
+
+        BOOST_STATIC_ASSERT( is_supported<view_gp_format<View>::value>::value );
+
+        return static_cast<BYTE *>( &gil::at_c<0>( view( 0, 0 ) ) );
     }
 
     template <typename View>
@@ -430,7 +462,7 @@ private:
             view.height(),
             view.pixels().row_size(),
             view_gp_format<View>::value,
-            interleaved_view_get_raw_data( view ),
+            get_raw_data( view ),
             0
         };
         return bitmapData;
@@ -452,7 +484,7 @@ private:
             (
                 pBitmap_,
                 0,
-                ImageLockModeUserInputBuf /* | ImageLockModeRead */,
+                ImageLockModeRead | ImageLockModeUserInputBuf,
                 bitmapData.PixelFormat,
                 pMutableBitmapData
             )
