@@ -157,12 +157,12 @@ inline void png_write_view(const std::string& filename,const View& view) {
 #ifdef BOOST_GIL_USE_NATIVE_IO
 
     #ifdef _WIN32
-        #include "gp_private_png_io.inl"
+        #include "gp_private_png_io.ipp"
     #endif
     
 #else // BOOST_GIL_USE_NATIVE_IO
 
-    #include "png_io_libpng.inl"
+    #include "png_io_libpng.ipp"
 
 #endif // BOOST_GIL_USE_NATIVE_IO
 
