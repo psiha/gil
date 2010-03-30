@@ -21,8 +21,9 @@
 //------------------------------------------------------------------------------
 #include "../../gil_all.hpp"
 #include "extern_lib_guard.hpp"
-#include "io_error.hpp"
+#include "formatted_image.hpp"
 #include "gp_private_istreams.hpp"
+#include "io_error.hpp"
 
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>
@@ -66,7 +67,6 @@ template <> struct gil_to_gp_format<bits16,rgba_t> : mpl::integral_c<Gdiplus::Pi
 typedef bgra_layout_t gp_alpha_layout_t;
 typedef bgr_layout_t  gp_layout_t;
 
-// An attempt to support packed pixel formats...still does not work/compile...:
 typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,6,5>, gp_layout_t>::type gp_rgb565_pixel_t;
 
 struct unpacked_view_gp_format
@@ -95,6 +95,16 @@ struct packed_view_gp_format
         >::type type;
     };
 };
+
+
+typedef mpl::vector5
+<
+    pixel_format_type<pixel<bits8 , gp_layout_t      >, false>,
+    pixel_format_type<pixel<bits8 , gp_alpha_layout_t>, false>,
+    pixel_format_type<pixel<bits16, gray_layout_t    >, false>,
+    pixel_format_type<gp_rgb565_pixel_t               , false>,
+    pixel_format_type<cmyk_t                          , false>
+> gp_supported_pixel_formats;
 
 
 template <class View>
@@ -201,20 +211,49 @@ class gp_guard
 };
 
 
+class gp_roi : public Gdiplus::Rect
+{
+public:
+    typedef INT                value_type;
+    typedef point2<value_type> point_t   ;
+
+    typedef point_t            offset_t  ;
+
+public:
+    gp_roi( value_type const x, value_type const y, value_type const width, value_type const height )
+        : Gdiplus::Rect( x, y, width, height ) {}
+
+    gp_roi( offset_t const offset, value_type const width, value_type const height )
+        : Gdiplus::Rect( Gdiplus::Point( offset.x, offset.y ), Gdiplus::Size( width, height ) ) {}
+
+    gp_roi( offset_t const top_left, offset_t const bottom_right )
+        : Gdiplus::Rect( Gdiplus::Point( top_left.x, top_left.y ), Gdiplus::Size( bottom_right.x - top_left.x, bottom_right.y - top_left.y ) ) {}
+};
+
+
 #if defined(BOOST_MSVC)
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
 
-class gp_bitmap : gp_guard//, noncopyable
+class gp_image
+    :
+    private gp_guard,
+    public  detail::formatted_image<gp_image, gp_supported_pixel_formats, gp_roi>
 {
+public:
+    template <class View>
+    struct is_supported : detail::is_supported<view_gp_format<View>::value> {};
+
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = sizeof( Gdiplus::ARGB ) );
+    
 private:
     // - GP wants wide-char paths
     // - we received a narrow-char path
     // - we are using GP that means we are also using Windows
     // - on Windows a narrow-char path can only be up to MAX_PATH in length:
     //  http://msdn.microsoft.com/en-us/library/aa365247(VS.85).aspx#maxpath
-    // - it is therefor safe to use a fixed sized/stack buffer...
+    // - it is therefore safe to use a fixed sized/stack buffer...
     class wide_path
     {
     public:
@@ -222,8 +261,8 @@ private:
         {
             BOOST_ASSERT( pFilename );
             BOOST_ASSERT( std::strlen( pFilename ) < wideFileName_.size() );
-            char  const * pSource     ( pFilename             );
-            WCHAR       * pDestination( wideFileName_.begin() );
+            char    const * pSource     ( pFilename             );
+            wchar_t       * pDestination( wideFileName_.begin() );
             do
             {
                 *pDestination++ = *pSource;
@@ -237,31 +276,32 @@ private:
         boost::array<wchar_t, MAX_PATH> wideFileName_;
     };
 
-protected:
-    //  This one is intended only for derived classes because GP uses lazy
-    // evaluation of the stream so the stream object must preexist and also
-    // outlive the GpBitmap object.
-    explicit gp_bitmap( IStream & stream )
-    {
-        ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStreamICM( &stream, &pBitmap_ ) );
-        BOOST_ASSERT( pBitmap_ );
-    }
 
-public:
-    explicit gp_bitmap( wchar_t const * const filename )
+public: /// \ingroup Construction
+    explicit gp_image( wchar_t const * const filename )
     {
         ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( filename, &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
-    explicit gp_bitmap( char const * const filename )
+    explicit gp_image( char const * const filename )
     {
         ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( wide_path( filename ), &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
+    // The passed IStream object must outlive the GpBitmap object (GDI+ uses
+    // lazy evaluation).
+    explicit gp_image( IStream & stream )
+    {
+        ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStreamICM( &stream, &pBitmap_ ) );
+        BOOST_ASSERT( pBitmap_ );
+    }
+
+    // The passed View object must outlive the GpBitmap object (GDI+ uses lazy
+    // evaluation).
     template <class View>
-    explicit gp_bitmap( View & view )
+    explicit gp_image( View & view )
     {
         // http://msdn.microsoft.com/en-us/library/ms536315(VS.85).aspx
         // stride has to be a multiple of 4 bytes
@@ -282,19 +322,28 @@ public:
         BOOST_ASSERT( pBitmap_ );
     }
 
-    ~gp_bitmap()
+    ~gp_image()
     {
         verify_result( Gdiplus::DllExports::GdipDisposeImage( pBitmap_ ) );
     }
 
 public:
-    point2<std::ptrdiff_t> get_dimensions() const
+    point2<std::ptrdiff_t> dimensions() const
     {
         using namespace Gdiplus;
         REAL width, height;
         verify_result( Gdiplus::DllExports::GdipGetImageDimension( const_cast<Gdiplus::GpBitmap *>( pBitmap_ ), &width, &height ) );
         return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
     }
+
+
+    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
+    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
+
+
+
+private: // Private formatted_image_base interface.
+    friend base_t;
 
     Gdiplus::PixelFormat get_format() const
     {
@@ -304,17 +353,57 @@ public:
         return format;
     }
 
+    image_type_id current_image_type_id() const
+    {
+        switch ( get_format() )
+        {
+            case PixelFormat48bppRGB      :
+            case PixelFormat24bppRGB      :
+                return 0;
 
+            case PixelFormat64bppARGB     :
+            case PixelFormat32bppARGB     :
+                return 1;
+
+            case PixelFormat16bppGrayScale:
+                return 2;
+
+            case PixelFormat16bppRGB565   :
+                return 3;
+
+            case PixelFormat32bppCMYK     :
+                return 4;
+
+            default:
+                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
+
+            case PixelFormat16bppRGB555   :
+
+            case PixelFormat64bppPARGB    :
+            case PixelFormat32bppPARGB    :
+
+            case PixelFormat16bppARGB1555 :
+
+            case PixelFormat32bppRGB      :
+
+            case PixelFormat1bppIndexed   :
+            case PixelFormat4bppIndexed   :
+            case PixelFormat8bppIndexed   :
+                return unsupported_format;
+        }
+    }
+
+public:
     template <typename View>
     void convert_to_prepared_view( View const & view ) const
     {
-        BOOST_STATIC_ASSERT( is_supported<view_gp_format<View>::value>::value );
+        BOOST_STATIC_ASSERT( detail::is_supported<view_gp_format<View>::value>::value );
 
         BOOST_ASSERT( !dimensions_mismatch( view ) );
 
         using namespace Gdiplus;
 
-        if ( is_supported<view_gp_format<View>::value>::value )
+        if ( detail::is_supported<view_gp_format<View>::value>::value )
         {
             PixelFormat const desired_format( view_gp_format<View>::value );
             pre_palettized_conversion<desired_format>( is_indexed<desired_format>::type() );
@@ -324,13 +413,6 @@ public:
         {
             convert_to_prepared_view( view, default_color_converter() );
         }
-    }
-
-    template <typename View>
-    void convert_to_view( View const & view ) const
-    {
-        ensure_dimensions_match();
-        convert_to_prepared_view( view )
     }
 
     template <typename View, typename CC>
@@ -349,7 +431,7 @@ public:
         }
         else
         {
-            bool const can_do_in_place( can_do_inplace_transform<typename View::value_type>() );
+            bool const can_do_in_place( can_do_inplace_transform<typename View::value_type>( my_format ) );
             if ( can_do_in_place )
             {
                 bitmapData.PixelFormat = my_format;
@@ -387,29 +469,13 @@ public:
         }
     }
 
-    template <typename View, typename CC>
-    void convert_to_view( View const & view, CC const & converter ) const
-    {
-        ensure_dimensions_match( view );
-        convert_to_prepared_view( view, converter );
-    }
-
-    template <typename View>
-    void copy_to_view( View const & view ) const
-    {
-        ensure_dimensions_match( view );
-        copy_to_prepared_view( view );
-    }
-
     template <typename View>
     void copy_to_prepared_view( View const & view ) const
     {
-        ensure_formats_match<View>();
+        BOOST_ASSERT( !dimensions_mismatch( view ) );
+        BOOST_ASSERT( !formats_mismatch<View>()    );
         convert_to_prepared_view( view );
     }
-
-    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
-    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
 
 private:
     static CLSID const & png_codec()
@@ -446,7 +512,7 @@ private:
         BOOST_STATIC_ASSERT((!is_planar<View>::value /*&& view_is_basic<View>::value*/));
         BOOST_STATIC_ASSERT((boost::is_pointer<typename View::x_iterator>::value));
 
-        BOOST_STATIC_ASSERT( is_supported<view_gp_format<View>::value>::value );
+        BOOST_STATIC_ASSERT( detail::is_supported<view_gp_format<View>::value>::value );
 
         return static_cast<BYTE *>( &gil::at_c<0>( view( 0, 0 ) ) );
     }
@@ -475,9 +541,6 @@ private:
         using namespace Gdiplus;
 
         BitmapData * const pMutableBitmapData( const_cast<BitmapData *>( &bitmapData ) );
-        // It actually performs faster if only ImageLockModeUserInputBuf is
-        // specified, without ImageLockModeRead. Probably does no locking at all
-        // even though this option is not clearly documented.
         GpStatus const load_result
         (
             DllExports::GdipBitmapLockBits
@@ -497,8 +560,8 @@ private:
 
     void copy_to_target( Gdiplus::BitmapData const & bitmapData ) const
     {
-        BOOST_ASSERT( bitmapData.Width       == static_cast<UINT>( get_dimensions().x ) );
-        BOOST_ASSERT( bitmapData.Height      == static_cast<UINT>( get_dimensions().y ) );
+        BOOST_ASSERT( bitmapData.Width       == static_cast<UINT>( dimensions().x ) );
+        BOOST_ASSERT( bitmapData.Height      == static_cast<UINT>( dimensions().y ) );
         //...this need not hold as it can be used to perform GDI+ default
         //internal colour conversion...maybe i'll provide another worker
         //function...
@@ -725,7 +788,7 @@ private:
 
     bool dimensions_mismatch( point2<std::ptrdiff_t> const & other_dimensions ) const
     {
-        return other_dimensions != get_dimensions();
+        return other_dimensions != dimensions();
     }
 
 
@@ -744,7 +807,7 @@ private:
     template <typename View>
     void ensure_dimensions_match( View const & view ) const
     {
-        ensure_dimensions_match( view.get_dimensions() );
+        ensure_dimensions_match( view.dimensions() );
     }
 
     void ensure_dimensions_match( point2<std::ptrdiff_t> const & other_dimensions ) const
@@ -765,6 +828,8 @@ private:
     }
 
 private:
+    friend class gp_view_base;
+
     Gdiplus::GpBitmap * /*const*/ pBitmap_;
 };
 
@@ -773,33 +838,127 @@ private:
 #endif
 
 
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class gp_view_base
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class gp_view_base : noncopyable
+{
+public:
+    ~gp_view_base()
+    {
+        verify_result( Gdiplus::DllExports::GdipBitmapUnlockBits( &bitmap_, &bitmapData_ ) );
+    }
+
+protected:
+    gp_view_base( gp_image & bitmap, unsigned int const lock_mode, gp_image::roi const * const p_roi = 0 )
+        :
+        bitmap_( *bitmap.pBitmap_ )
+    {
+        std::memset( &bitmapData_, 0, sizeof( bitmapData_ ) );
+
+        ensure_result
+        (
+            Gdiplus::DllExports::GdipBitmapLockBits
+            (
+                &bitmap_,
+                p_roi,
+                lock_mode,
+                bitmap.get_format(),
+                &bitmapData_
+            )
+        );
+    }
+
+    template <typename Pixel>
+    typename type_from_x_iterator<Pixel *>::view_t
+    get_typed_view()
+    {
+        //todo assert correct type...
+        interleaved_view<Pixel *>( bitmapData_.Width, bitmapData_.Height, bitmapData_.Scan0, bitmapData_.Stride );
+    }
+
+private:
+    Gdiplus::GpBitmap   & bitmap_    ;
+    Gdiplus::BitmapData   bitmapData_;
+};
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class gp_view
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename Pixel>
+class gp_view
+    :
+    private gp_view_base,
+    public  type_from_x_iterator<Pixel *>::view_t
+{
+public:
+    gp_view( gp_image & image, gp_image::roi const * const p_roi = 0 )
+        :
+        gp_view_base( image, ImageLockModeRead | ( is_const<Pixel>::value * ImageLockModeWrite ), p_roi ),
+        type_from_x_iterator<Pixel *>::view_t( get_typed_view<Pixel>() )
+    {}
+};
+
+
+//...mhmh...to be seen if necessary...
+//template <typename Pixel>
+//class gp_const_view
+//    :
+//    private gp_view_base,
+//    public  type_from_x_iterator<Pixel const *>::view_t
+//{
+//public:
+//    gp_const_view( gp_image & image, gp_image::roi const * const p_roi = 0 )
+//        :
+//        gp_view_base( image, ImageLockModeRead ),
+//        type_from_x_iterator<Pixel const *>::view_t( get_typed_view<Pixel const>() )
+//    {}
+//};
+
+
+//...mhmh...to be implemented...
+//template <class Impl, class SupportedPixelFormats, class ROI>
+//inline
+//typename formatted_image<Impl, SupportedPixelFormats, ROI>::view_t
+//view( formatted_image<Impl, SupportedPixelFormats, ROI> & img );// { return img._view; }
+
+
 #pragma warning( push )
 #pragma warning( disable : 4355 ) // 'this' used in base member initializer list.
 
-class __declspec( novtable ) gp_memory_bitmap sealed
+class __declspec( novtable ) gp_memory_image sealed
     :
     private MemoryReadStream,
-    public  gp_bitmap
+    public  gp_image
 {
 public:
-    gp_memory_bitmap( memory_chunk_t const & in_memory_image )
+    gp_memory_image( memory_chunk_t const & in_memory_image )
         :
         MemoryReadStream( in_memory_image                 ),
-        gp_bitmap       ( static_cast<IStream &>( *this ) )
+        gp_image        ( static_cast<IStream &>( *this ) )
     {
     }
 };
 
-class __declspec( novtable ) gp_FILE_bitmap sealed
+class __declspec( novtable ) gp_FILE_image sealed
     :
     private FileReadStream,
-    public  gp_bitmap
+    public  gp_image
 {
 public:
-    explicit gp_FILE_bitmap( FILE * const pFile )
+    explicit gp_FILE_image( FILE * const pFile )
         :
         FileReadStream( *pFile                          ),
-        gp_bitmap     ( static_cast<IStream &>( *this ) )
+        gp_image      ( static_cast<IStream &>( *this ) )
     {
     }
 };
