@@ -44,6 +44,13 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
+#if (GDIPVER >= 0x0110)
+Gdiplus::PixelFormat const cmyk_format( PixelFormat32bppCMYK | PixelFormatGDI );
+#undef PixelFormat32bppCMYK
+#define PixelFormat32bppCMYK cmyk_format
+#else
+#undef PixelFormat32bppCMYK
+#endif // (GDIPVER >= 0x0110)
 
 template <Gdiplus::PixelFormat gp_format> struct is_canonical            : mpl::bool_ <(gp_format & PixelFormatCanonical) != 0> {};
 template <Gdiplus::PixelFormat gp_format> struct is_extended             : mpl::bool_ <(gp_format & PixelFormatExtended ) != 0> {};
@@ -54,70 +61,49 @@ template <Gdiplus::PixelFormat gp_format> struct has_premultiplied_alpha : mpl::
 template <Gdiplus::PixelFormat gp_format> struct pixel_size              : mpl::size_t<( gp_format >> 8 ) & 0xff              > {};
 
 
-template <typename Channel, typename ColorSpace>
-struct gil_to_gp_format : mpl::integral_c<Gdiplus::PixelFormat, PixelFormatUndefined> {};
-
-template <> struct gil_to_gp_format<bits8 ,rgb_t > : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat24bppRGB      > {};
-template <> struct gil_to_gp_format<bits8 ,rgba_t> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat32bppARGB     > {};
-template <> struct gil_to_gp_format<bits16,gray_t> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat16bppGrayScale> {};
-template <> struct gil_to_gp_format<bits16,rgb_t > : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat48bppRGB      > {};
-template <> struct gil_to_gp_format<bits16,rgba_t> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat64bppARGB     > {};
-
-/// @see GdiplusPixelFormats.h: ARGB -> little endian BGRA 
+/// @see GdiplusPixelFormats.h: ARGB -> little endian BGRA
 typedef bgra_layout_t gp_alpha_layout_t;
 typedef bgr_layout_t  gp_layout_t;
 
-typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,6,5>, gp_layout_t>::type gp_rgb565_pixel_t;
 
-struct unpacked_view_gp_format
-{
-    template <class View>
-    struct apply
-    {
-        typedef gil_to_gp_format
-                <
-                    typename channel_type    <View>::type,
-                    typename color_space_type<View>::type
-                > type;
-    };
-};
-
-struct packed_view_gp_format
-{
-    template <class View>
-    struct apply
-    {
-        typedef typename mpl::if_
-        <
-            is_same<typename View::value_type, gp_rgb565_pixel_t>,
-            mpl::integral_c<Gdiplus::PixelFormat, PixelFormat16bppRGB565>,
-            mpl::integral_c<Gdiplus::PixelFormat, PixelFormatUndefined>
-        >::type type;
-    };
-};
+typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,6,5>, gp_layout_t>::type gp_bgr565_pixel_t;
 
 
-typedef mpl::vector5
+template <typename Pixel, bool IsPlanar>
+struct gil_to_gp_format : mpl::integral_c<Gdiplus::PixelFormat, PixelFormatUndefined> {};
+
+template <> struct gil_to_gp_format<gp_bgr565_pixel_t, false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat16bppRGB565   > {};
+template <> struct gil_to_gp_format<bgr8_pixel_t     , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat24bppRGB      > {};
+template <> struct gil_to_gp_format<bgra8_pixel_t    , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat32bppARGB     > {};
+template <> struct gil_to_gp_format<gray16_pixel_t   , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat16bppGrayScale> {};
+template <> struct gil_to_gp_format<bgr16_pixel_t    , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat48bppRGB      > {};
+template <> struct gil_to_gp_format<bgra16_pixel_t   , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat64bppARGB     > {};
+#if (GDIPVER >= 0x0110)
+template <> struct gil_to_gp_format<cmyk8_pixel_t    , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat32bppCMYK     > {};
+#endif // (GDIPVER >= 0x0110)
+
+
+typedef mpl::
+#if (GDIPVER >= 0x0110)
+    vector4
+#else
+    vector3
+#endif
 <
-    pixel_format_type<pixel<bits8 , gp_layout_t      >, false>,
-    pixel_format_type<pixel<bits8 , gp_alpha_layout_t>, false>,
-    pixel_format_type<pixel<bits16, gray_layout_t    >, false>,
-    pixel_format_type<gp_rgb565_pixel_t               , false>,
-    pixel_format_type<cmyk_t                          , false>
+    image<bgr8_pixel_t     , false>,
+    image<bgra8_pixel_t    , false>,
+    image<gp_bgr565_pixel_t, false>
+    #if (GDIPVER >= 0x0110)
+    ,image<cmyk8_pixel_t   , false>
+    #endif
 > gp_supported_pixel_formats;
 
 
-template <class View>
 struct view_gp_format
-    :
-    mpl::eval_if_c
-    <
-        // Err, an 'official' way to detect this?
-        ( mpl::size<typename View::value_type::layout_t::channel_mapping_t>::value <= sizeof( typename View::value_type ) ),
-        mpl::identity<unpacked_view_gp_format>,
-        mpl::identity<  packed_view_gp_format>
-    >::type::apply<View>::type
-{};
+{
+    template <class View>
+    struct apply : gil_to_gp_format<typename View::value_type, is_planar<View>::value> {};
+};
 
 
 typedef iterator_range<TCHAR const *> string_chunk_t;
@@ -230,6 +216,59 @@ public:
         : Gdiplus::Rect( Gdiplus::Point( top_left.x, top_left.y ), Gdiplus::Size( bottom_right.x - top_left.x, bottom_right.y - top_left.y ) ) {}
 };
 
+class gp_image;
+
+template <>
+struct formatted_image_traits<gp_image>
+{
+    typedef Gdiplus::PixelFormat format_t;
+
+    typedef gp_supported_pixel_formats supported_pixel_formats_t;
+
+    typedef gp_roi roi_t;
+
+    typedef view_gp_format view_to_native_format;
+
+    template <class View>
+    struct is_supported : detail::is_supported<view_gp_format::apply<View>::value> {};
+
+    struct view_data_t : public Gdiplus::BitmapData
+    {
+        template <typename View>
+        view_data_t( View const & view ) : p_roi_( 0 ) { set_bitmapdata_for_view( view ); }
+
+        template <typename View>
+        view_data_t( View const & view, gp_roi::offset_t const & offset )
+            :
+            p_roi_( static_cast<gp_roi const *>( optional_roi_.address() ) )
+        {
+            set_bitmapdata_for_view( view );
+            new ( optional_roi_.address() ) gp_roi( offset, Width, Height );
+        }
+
+        Gdiplus::Rect const * const p_roi_;
+
+    private:
+        template <typename View>
+        void set_bitmapdata_for_view( View const & view )
+        {
+            Width    = view.width();
+            Height   = view.height();
+            Stride   = view.pixels().row_size();
+            PixelFormat   = view_gp_format::apply<View>::value;
+            Scan0    = formatted_image_base::get_raw_data( view );
+            Reserved = 0;
+        }
+
+        void operator=( view_data_t const & );
+
+    private:
+        aligned_storage<sizeof( gp_roi ), alignment_of<gp_roi>::value>::type optional_roi_;
+    };
+
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = sizeof( Gdiplus::ARGB ) );
+};
+
 
 #if defined(BOOST_MSVC)
 #   pragma warning( push )
@@ -239,14 +278,14 @@ public:
 class gp_image
     :
     private gp_guard,
-    public  detail::formatted_image<gp_image, gp_supported_pixel_formats, gp_roi>
+    public  detail::formatted_image<gp_image>
 {
 public:
-    template <class View>
-    struct is_supported : detail::is_supported<view_gp_format<View>::value> {};
+    static std::size_t format_size( format_t const format )
+    {
+        return Gdiplus::GetPixelFormatSize( format );
+    }
 
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = sizeof( Gdiplus::ARGB ) );
-    
 private:
     // - GP wants wide-char paths
     // - we received a narrow-char path
@@ -314,7 +353,7 @@ public: /// \ingroup Construction
                 view.width(),
                 view.height(),
                 view.pixels().row_size(),
-                view_gp_format<View>::value,
+                view_gp_format::apply<View>::value,
                 get_raw_data( view ),
                 &pBitmap_
             )
@@ -332,7 +371,7 @@ public:
     {
         using namespace Gdiplus;
         REAL width, height;
-        verify_result( Gdiplus::DllExports::GdipGetImageDimension( const_cast<Gdiplus::GpBitmap *>( pBitmap_ ), &width, &height ) );
+        verify_result( DllExports::GdipGetImageDimension( const_cast<GpBitmap *>( pBitmap_ ), &width, &height ) );
         return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
     }
 
@@ -345,137 +384,146 @@ public:
 private: // Private formatted_image_base interface.
     friend base_t;
 
-    Gdiplus::PixelFormat get_format() const
+    format_t format() const
     {
-        using namespace Gdiplus;
-        PixelFormat format;
-        verify_result( DllExports::GdipGetImagePixelFormat( pBitmap_, &format ) );
-        return format;
+        format_t pixel_format;
+        verify_result( Gdiplus::DllExports::GdipGetImagePixelFormat( pBitmap_, &pixel_format ) );
+        return pixel_format;
     }
 
-    image_type_id current_image_type_id() const
+    format_t closest_gil_supported_format() const
     {
-        switch ( get_format() )
+        //http://www.tech-archive.net/Archive/Development/microsoft.public.win32.programmer.gdi/2008-01/msg00044.html
+        switch ( format() )
         {
-            case PixelFormat48bppRGB      :
-            case PixelFormat24bppRGB      :
-                return 0;
-
-            case PixelFormat64bppARGB     :
-            case PixelFormat32bppARGB     :
-                return 1;
-
             case PixelFormat16bppGrayScale:
-                return 2;
-
-            case PixelFormat16bppRGB565   :
-                return 3;
-
-            case PixelFormat32bppCMYK     :
-                return 4;
-
-            default:
-                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
-
-            case PixelFormat16bppRGB555   :
+            case PixelFormat48bppRGB      :
+            case PixelFormat32bppRGB      :
+            case PixelFormat24bppRGB      :
+                return
+                    PixelFormat24bppRGB;
 
             case PixelFormat64bppPARGB    :
             case PixelFormat32bppPARGB    :
-
+            case PixelFormat64bppARGB     :
+            case PixelFormat32bppARGB     :
             case PixelFormat16bppARGB1555 :
+                return
+                    PixelFormat32bppARGB;
 
-            case PixelFormat32bppRGB      :
-
-            case PixelFormat1bppIndexed   :
-            case PixelFormat4bppIndexed   :
+            case PixelFormat16bppRGB565   :
+            case PixelFormat16bppRGB555   :
             case PixelFormat8bppIndexed   :
+            case PixelFormat4bppIndexed   :
+            case PixelFormat1bppIndexed   :
+                return
+                    PixelFormat16bppRGB565;
+
+            #if (GDIPVER >= 0x0110)
+            case PixelFormat32bppCMYK     :
+                return
+                    PixelFormat32bppCMYK;
+            #endif // (GDIPVER >= 0x0110)
+
+            default:
+                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
+                return PixelFormatUndefined;
+        }
+
+    }
+
+    image_type_id current_image_format_id() const
+    {
+        return image_format_id( closest_gil_supported_format() );
+    }
+
+    static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    {
+        switch ( closest_gil_supported_format )
+        {
+            case PixelFormat24bppRGB      : return 0;
+            case PixelFormat32bppARGB     : return 1;
+            case PixelFormat16bppGrayScale: return 2;
+            case PixelFormat16bppRGB565   : return 3;
+            #if (GDIPVER >= 0x0110)
+            case PixelFormat32bppCMYK     : return 4;
+            #endif
+
+            default:
+                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
                 return unsupported_format;
         }
     }
 
 public:
     template <typename View>
-    void convert_to_prepared_view( View const & view ) const
+    void generic_convert_to_prepared_view( View const & view ) const
     {
-        BOOST_STATIC_ASSERT( detail::is_supported<view_gp_format<View>::value>::value );
-
         BOOST_ASSERT( !dimensions_mismatch( view ) );
+        //BOOST_ASSERT( !formats_mismatch   ( view ) );
+
+        BitmapData bitmapData;
+        Rect const rect( 0, 0, bitmapData.Width, bitmapData.Height );
+        ensure_result
+        (
+            DllExports::GdipBitmapLockBits
+            (
+                pBitmap_,
+                &rect,
+                ImageLockModeRead,
+                view_gp_format::apply<View>::value,
+                &bitmapData
+            )
+        );
+        copy_pixels // This must not throw!
+        (
+            interleaved_view
+            (
+                bitmapData.Width ,
+                bitmapData.Height,
+                gil_reinterpret_cast_c<typename View::value_type const *>( bitmapData.Scan0 ),
+                bitmapData.Stride
+            ),
+            view
+        );
+        verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &bitmapData ) );
+    }
+
+    void raw_convert_to_prepared_view( formatted_image_traits<gp_image>::view_data_t const & view_data ) const
+    {
+        BOOST_ASSERT( view_data.Scan0 );
 
         using namespace Gdiplus;
 
-        if ( detail::is_supported<view_gp_format<View>::value>::value )
-        {
-            PixelFormat const desired_format( view_gp_format<View>::value );
-            pre_palettized_conversion<desired_format>( is_indexed<desired_format>::type() );
-            copy_to_target( get_bitmap_data_for_view( view ) );
-        }
-        else
-        {
-            convert_to_prepared_view( view, default_color_converter() );
-        }
+        BitmapData * const pMutableBitmapData( const_cast<BitmapData *>( static_cast<BitmapData const *>( &view_data ) ) );
+        GpStatus const load_result
+        (
+            DllExports::GdipBitmapLockBits
+            (
+                pBitmap_,
+                view_data.p_roi_,
+                ImageLockModeRead | ImageLockModeUserInputBuf,
+                view_data.PixelFormat,
+                pMutableBitmapData
+            )
+        );
+        GpStatus const unlock_result( DllExports::GdipBitmapUnlockBits( pBitmap_, pMutableBitmapData ) );
+        ensure_result(   load_result );
+        verify_result( unlock_result );
     }
 
-    template <typename View, typename CC>
-    void convert_to_prepared_view( View const & view, CC const & converter ) const
+
+    void copy_to_target( formatted_image_traits<gp_image>::view_data_t const & view_data ) const
     {
-        BOOST_ASSERT( !dimensions_mismatch( view ) );
-
-        using namespace Gdiplus;
-
-        PixelFormat const my_format ( get_format()                     );
-        BitmapData        bitmapData( get_bitmap_data_for_view( view ) );
-
-        if ( my_format == view_gp_format<View>::value )
-        {
-            copy_to_target( bitmapData );
-        }
-        else
-        {
-            bool const can_do_in_place( can_do_inplace_transform<typename View::value_type>( my_format ) );
-            if ( can_do_in_place )
-            {
-                bitmapData.PixelFormat = my_format;
-                copy_to_target( bitmapData );
-                transform( my_format, view, view, converter );
-            }
-            else
-            {
-                BOOST_ASSERT( bitmapData.Scan0 );
-                typedef typename View::value_type pixel_t;
-                pixel_t * const p_raw_view( static_cast<pixel_t *>( bitmapData.Scan0 ) );
-                bitmapData.Scan0 = 0;
-
-                Rect const rect( 0, 0, bitmapData.Width, bitmapData.Height );
-                ensure_result
-                (
-                    DllExports::GdipBitmapLockBits
-                    (
-                        pBitmap_,
-                        &rect,
-                        ImageLockModeRead,
-                        bitmapData.PixelFormat,
-                        &bitmapData
-                    )
-                );
-                transform
-                (
-                    bitmapData.PixelFormat,
-                    interleaved_view( bitmapData.Width, bitmapData.Height, p_raw_view, bitmapData.Stride ),
-                    view,
-                    converter
-                );
-                verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &bitmapData ) );
-            }
-        }
+        BOOST_ASSERT( view_data.Width       == static_cast<UINT>( dimensions().x ) );
+        BOOST_ASSERT( view_data.Height      == static_cast<UINT>( dimensions().y ) );
+        //...this need not hold as it can be used to perform GDI+ default
+        //internal colour conversion...maybe i'll provide another worker
+        //function...
+        //BOOST_ASSERT( view_data.PixelFormat ==                    format    ()     );
+        raw_convert_to_prepared_view( view_data );
     }
 
-    template <typename View>
-    void copy_to_prepared_view( View const & view ) const
-    {
-        BOOST_ASSERT( !dimensions_mismatch( view ) );
-        BOOST_ASSERT( !formats_mismatch<View>()    );
-        convert_to_prepared_view( view );
-    }
 
 private:
     static CLSID const & png_codec()
@@ -504,70 +552,6 @@ private:
         return clsid;
     }
 
-    template <typename View>
-    static BYTE * get_raw_data( View const & view )
-    {
-        // A private implementation of interleaved_view_get_raw_data() that
-        // works with packed pixel views.
-        BOOST_STATIC_ASSERT((!is_planar<View>::value /*&& view_is_basic<View>::value*/));
-        BOOST_STATIC_ASSERT((boost::is_pointer<typename View::x_iterator>::value));
-
-        BOOST_STATIC_ASSERT( detail::is_supported<view_gp_format<View>::value>::value );
-
-        return static_cast<BYTE *>( &gil::at_c<0>( view( 0, 0 ) ) );
-    }
-
-    template <typename View>
-    Gdiplus::BitmapData get_bitmap_data_for_view( View const & view ) const
-    {
-        using namespace Gdiplus;
-
-        BitmapData const bitmapData =
-        {
-            view.width(),
-            view.height(),
-            view.pixels().row_size(),
-            view_gp_format<View>::value,
-            get_raw_data( view ),
-            0
-        };
-        return bitmapData;
-    }
-
-    void convert_to_target( Gdiplus::BitmapData const & bitmapData ) const
-    {
-        BOOST_ASSERT( bitmapData.Scan0 );
-
-        using namespace Gdiplus;
-
-        BitmapData * const pMutableBitmapData( const_cast<BitmapData *>( &bitmapData ) );
-        GpStatus const load_result
-        (
-            DllExports::GdipBitmapLockBits
-            (
-                pBitmap_,
-                0,
-                ImageLockModeRead | ImageLockModeUserInputBuf,
-                bitmapData.PixelFormat,
-                pMutableBitmapData
-            )
-        );
-        GpStatus const unlock_result( DllExports::GdipBitmapUnlockBits( pBitmap_, pMutableBitmapData ) );
-        ensure_result(   load_result );
-        verify_result( unlock_result );
-    }
-
-
-    void copy_to_target( Gdiplus::BitmapData const & bitmapData ) const
-    {
-        BOOST_ASSERT( bitmapData.Width       == static_cast<UINT>( dimensions().x ) );
-        BOOST_ASSERT( bitmapData.Height      == static_cast<UINT>( dimensions().y ) );
-        //...this need not hold as it can be used to perform GDI+ default
-        //internal colour conversion...maybe i'll provide another worker
-        //function...
-        //BOOST_ASSERT( bitmapData.PixelFormat ==                    get_format    ()     );
-        convert_to_target( bitmapData );
-    }
 
     template <Gdiplus::PixelFormat desired_format>
     void pre_palettized_conversion( mpl::true_ /*is_indexed*/ )
@@ -576,7 +560,7 @@ private:
         // A GDI+ 1.1 (a non-distributable version, distributed with MS Office
         // 2003 and MS Windows Vista and MS Windows 7) 'enhanced'/'tuned'
         // version of the conversion routine for indexed/palettized image
-        // formats. Unless/until proven usefull, pretty much still a GDI+ 1.1
+        // formats. Unless/until proven useful, pretty much still a GDI+ 1.1
         // tester...
     
         BOOST_ASSERT( !has_alpha<desired_format>::value && "Is this possible for indexed formats?" );
@@ -623,208 +607,10 @@ private:
     template <Gdiplus::PixelFormat desired_format>
     void pre_palettized_conversion( mpl::false_ /*not is_indexed*/ ) const {}
 
-
-    template <class SourceView, class DestinationView, class CC>
-    static void transform( Gdiplus::PixelFormat const sourceFormat, SourceView const & src, DestinationView const & dst, CC const & converter )
-    {
-        // Reinterpret cast/type punning ugliness is required for dynamic
-        // in-place detection/optimization...to be cleaned up...
-        typedef typename DestinationView::value_type target_pixel_t;
-        switch ( sourceFormat )
-        {
-            case PixelFormat48bppRGB      :
-            case PixelFormat24bppRGB      :
-                typedef pixel<bits8, gp_layout_t>                           gp_rgb24_pixel_t;
-                typedef view_type_from_pixel<gp_rgb24_pixel_t, false>::type gp_rgb24_view_t ;
-                transform_pixels
-                (
-                     *gil_reinterpret_cast_c<gp_rgb24_view_t const *>( &src ),
-                     dst,
-                     color_convert_deref_fn
-                     <
-                        gp_rgb24_pixel_t const &,
-                        target_pixel_t,
-                        CC
-                     >( converter )
-                );
-                break;
-
-            case PixelFormat64bppARGB     :
-            case PixelFormat32bppARGB     :
-                typedef pixel<bits8, gp_alpha_layout_t>                      gp_argb32_pixel_t;
-                typedef view_type_from_pixel<gp_argb32_pixel_t, false>::type gp_argb32_view_t ;
-                transform_pixels
-                (
-                     *gil_reinterpret_cast_c<gp_argb32_view_t const *>( &src ),
-                     dst,
-                     color_convert_deref_fn
-                     <
-                        gp_argb32_pixel_t const &,
-                        target_pixel_t,
-                        CC
-                     >( converter )
-                );
-                break;
-
-            case PixelFormat16bppGrayScale:
-                typedef view_type_from_pixel<gray16_pixel_t, false>::type gp_gray16_view_t ;
-                transform_pixels
-                (
-                     *gil_reinterpret_cast_c<gp_gray16_view_t const *>( &src ),
-                     dst,
-                     color_convert_deref_fn
-                     <
-                        gray16_ref_t,
-                        target_pixel_t,
-                        CC
-                     >( converter )
-                );
-                break;
-
-            case PixelFormat16bppRGB555   :
-                BOOST_ASSERT( !"What about unused bits?" );
-                typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,5,5>, gp_layout_t>::type gp555_pixel_t      ;
-                typedef view_type_from_pixel<gp555_pixel_t, false>::type                               gp_rgb16_555_view_t;
-                //...this...does not compile...how to specify a layout with an
-                //unused bit?
-                //transform_pixels
-                //(
-                //     *gil_reinterpret_cast_c<gp_rgb16_555_view_t const *>( &src ),
-                //     dst,
-                //     color_convert_deref_fn
-                //     <
-                //        gp555_pixel_t const &,
-                //        target_pixel_t,
-                //        CC
-                //     >( converter )
-                //);
-                break;
-
-            case PixelFormat16bppRGB565   :
-                BOOST_ASSERT( !"Why does this fail to compile?" );
-                typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,6,5>, gp_layout_t>::type gp565_pixel_t      ;
-                typedef view_type_from_pixel<gp565_pixel_t, false>::type                               gp_rgb16_565_view_t;
-                //transform_pixels
-                //(
-                //     *gil_reinterpret_cast_c<gp_rgb16_565_view_t const *>( &src ),
-                //     dst,
-                //     color_convert_deref_fn
-                //     <
-                //        //gp565_pixel_t const &,
-                //        //gp_rgb16_565_view_t::reference,
-                //        gp565_pixel_t::const_reference,
-                //        target_pixel_t,
-                //        CC
-                //     >( converter )
-                //);
-                break;
-
-            case PixelFormat32bppCMYK     :
-                BOOST_ASSERT( !"What about byte order/endianess here?" );
-                typedef view_type_from_pixel<cmyk_t, false>::type gp_cmyk_view_t;
-                //...this...does not compile...
-                //transform_pixels
-                //(
-                //     *gil_reinterpret_cast_c<gp_cmyk_view_t const *>( &src ),
-                //     dst,
-                //     color_convert_deref_fn
-                //     <
-                //        cmyk_t const &,
-                //        target_pixel_t,
-                //        CC
-                //     >( converter )
-                //);
-                break;
-
-            case PixelFormat64bppPARGB    :
-            case PixelFormat32bppPARGB    :
-                BOOST_ASSERT( !"What about premultiplied alpha?" );
-                break;
-
-            case PixelFormat16bppARGB1555 :
-                BOOST_ASSERT( !"What about 'high colour with 1 bit alpha?" );
-                break;
-
-            case PixelFormat32bppRGB      :
-                BOOST_ASSERT( !"What about 4 byte pixels without alpha?" );
-                break;
-
-            case PixelFormat1bppIndexed   :
-            case PixelFormat4bppIndexed   :
-            case PixelFormat8bppIndexed   :
-                BOOST_ASSERT( !"What about indexed colour?" );
-                break;
-
-            default: BOOST_ASSERT( !"Should not get reached." ); __assume( false );
-        }
-    }
-
-
     void save_to( char    const * const pFilename, CLSID const & encoderID ) const { save_to( wide_path( pFilename ), encoderID ); }
     void save_to( wchar_t const * const pFilename, CLSID const & encoderID ) const
     {
         ensure_result( Gdiplus::DllExports::GdipSaveImageToFile( pBitmap_, pFilename, &encoderID, NULL ) );
-    }
-
-
-    template <typename Pixel>
-    bool can_do_inplace_transform() const
-    {
-        return can_do_inplace_transform<Pixel>( get_format() );
-    }
-
-    template <typename Pixel>
-    bool can_do_inplace_transform( Gdiplus::PixelFormat const my_format ) const
-    {
-        return ( Gdiplus::GetPixelFormatSize( my_format ) == sizeof( Pixel ) );
-    }
-
-
-    template <typename View>
-    bool dimensions_mismatch( View const & view ) const
-    {
-        return dimensions_mismatch( view.dimensions() );
-    }
-
-    bool dimensions_mismatch( point2<std::ptrdiff_t> const & other_dimensions ) const
-    {
-        return other_dimensions != dimensions();
-    }
-
-
-    template <typename View>
-    bool formats_mismatch() const
-    {
-        return formats_mismatch( view_gp_format<View>::value );
-    }
-
-    bool formats_mismatch( Gdiplus::PixelFormat const other_format ) const
-    {
-        return other_format != get_format();
-    }
-
-
-    template <typename View>
-    void ensure_dimensions_match( View const & view ) const
-    {
-        ensure_dimensions_match( view.dimensions() );
-    }
-
-    void ensure_dimensions_match( point2<std::ptrdiff_t> const & other_dimensions ) const
-    {
-        io_error_if( dimensions_mismatch( other_dimensions ), "input view size does not match source image size" );
-    }
-
-
-    template <typename View>
-    void ensure_formats_match() const
-    {
-        ensure_formats_match( view_gp_format<View>::value );
-    }
-
-    void ensure_formats_match( Gdiplus::PixelFormat const other_format ) const
-    {
-        io_error_if( formats_mismatch( other_format ), "input view type is incompatible with the image type" );
     }
 
 private:
@@ -867,7 +653,7 @@ protected:
                 &bitmap_,
                 p_roi,
                 lock_mode,
-                bitmap.get_format(),
+                bitmap.format(),
                 &bitmapData_
             )
         );

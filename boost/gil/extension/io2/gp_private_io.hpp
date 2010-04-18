@@ -42,7 +42,7 @@ inline point2<std::ptrdiff_t> read_dimensions( char const * const filename ) {
 
 template <typename View>
 inline void read_view( gp_image const & image, View const & view ) {
-    image.copy_to_view( view );
+    image.copy_to( view, ensure_dimensions_match(), ensure_formats_match() );
 }
 
 template <typename View>
@@ -53,8 +53,7 @@ inline void read_view( char const * const filename, View const & view ) {
 
 template <typename Image>
 inline void read_image( gp_image const & gp_image, Image & gil_image ) {
-    gil_image.recreate( gp_image.get_dimensions(), sizeof( Gdiplus::ARGB ) );
-    gp_image.copy_to_prepared_view( view( gil_image ) );
+    gp_image.copy_to_image( gil_image, synchronize_dimensions(), ensure_formats_match() );
 }
 
 template <typename Image>
@@ -91,9 +90,8 @@ inline void read_and_convert_view( const char* filename, const View& view ) {
 
 
 template <typename Image,typename CC>
-inline void read_and_convert_image( gp_image const & gp_image, Image & gil_image, CC cc ) {
-    gil_image.recreate( gp_image.get_dimensions(), sizeof( Gdiplus::ARGB ) );
-    gp_image.convert_to_prepared_view( view( gil_image ), cc );
+inline void read_and_convert_image( gp_image const & gp_image, Image & gil_image, CC const cc ) {
+    gp_image.copy_to_image( gil_image, synchronize_dimensions() , cc );
 }
 
 template <typename Image,typename CC>
@@ -109,8 +107,7 @@ inline void read_and_convert_image( wchar_t const * const filename, Image & im, 
 
 template <typename Image>
 inline void read_and_convert_image( gp_image const & gp_image, Image & gil_image ) {
-    gil_image.recreate( gp_image.dimensions(), sizeof( Gdiplus::ARGB ) );
-    gp_image.convert_to_prepared_view( view( gil_image ) );
+    gp_image.copy_to_image( gil_image, synchronize_dimensions() , synchronize_formats() );
 }
 
 template <typename Image>
