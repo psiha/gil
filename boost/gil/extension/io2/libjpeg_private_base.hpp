@@ -43,7 +43,6 @@ namespace detail
 
 BOOST_STATIC_ASSERT( BITS_IN_JSAMPLE == 8 );
 
-
 template <typename Pixel, bool isPlanar>
 struct gil_to_libjpeg_format : mpl::integral_c<J_COLOR_SPACE, JCS_UNKNOWN> {};
 
@@ -242,23 +241,28 @@ public:
 
     format_t closest_gil_supported_format() const
     {
-        switch ( format() )
+        format_t const current_format( format() );
+        #ifdef _DEBUG
+        switch ( current_format )
         {
-            case JCS_RGB  :
-            case JCS_YCbCr:
-                return JCS_RGB;
-            
-            case JCS_CMYK:
-            case JCS_YCCK:
-                return JCS_CMYK;
-
-            case JCS_GRAYSCALE:
-                return JCS_GRAYSCALE;
-
             default:
-                BOOST_ASSERT( format() == JCS_UNKNOWN );
-                BOOST_ASSERT( !"Unknown format." );
-                return JCS_UNKNOWN;
+                BOOST_ASSERT( !"Unknown format code." );
+
+            case JCS_RGB      :
+            case JCS_YCbCr    :
+            case JCS_CMYK     :
+            case JCS_YCCK     :
+            case JCS_GRAYSCALE:
+            case JCS_UNKNOWN  :
+                break;
+        }
+        #endif
+
+        switch ( current_format )
+        {
+            case JCS_YCbCr: return JCS_RGB       ;
+            case JCS_YCCK : return JCS_CMYK      ;
+            default       : return current_format;
         }
     }
 
@@ -275,7 +279,7 @@ public:
             case JCS_GRAYSCALE: return 1;
             case JCS_CMYK     : return 2;
             default:
-                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
+                BOOST_ASSERT( closest_gil_supported_format == JCS_UNKNOWN );
                 return unsupported_format;
         }
     }
@@ -380,7 +384,7 @@ private: // Private formatted_image_base interface.
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
         typedef typename MyView::value_type pixel_t;
-        std::size_t const scanline_length( decompressor().image_width * decompressor().num_components );
+        std::size_t         const scanline_length  ( decompressor().image_width * decompressor().num_components );
         scoped_ptr<JSAMPLE> const p_scanline_buffer( new JSAMPLE[ scanline_length ] );
         JSAMPROW       scanline   ( p_scanline_buffer.get()    );
         JSAMPROW const scanlineEnd( scanline + scanline_length );
@@ -426,7 +430,7 @@ private: // Private formatted_image_base interface.
         }
     }
 
-    void copy_to_prepared_view( view_data_t const & view_data ) const
+    void raw_copy_to_prepared_view( view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.width_  == static_cast<unsigned int>( dimensions().x ) );
         BOOST_ASSERT( view_data.height_ == static_cast<unsigned int>( dimensions().y ) );
