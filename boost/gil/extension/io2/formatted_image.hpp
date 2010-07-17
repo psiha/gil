@@ -26,6 +26,7 @@
 
 #include <boost/gil/extension/dynamic_image/any_image.hpp>
 
+#include <boost/compressed_pair.hpp>
 #ifdef _DEBUG
 #include <boost/detail/endian.hpp>
 #endif // _DEBUG
@@ -101,7 +102,7 @@ struct channel_converter<SrcChannelV, packed_channel_value<DestPackedNumBits> >
         typedef detail::channel_convert_to_unsigned  <SrcChannelV> to_unsigned;
         typedef detail::channel_convert_from_unsigned<DstChannelV> from_unsigned;
 
-        if ( is_unsigned<SrcChannelV>::value )
+        if ( std::tr1::is_unsigned<SrcChannelV>::value )
         {
             SrcChannelV  const source_max( detail::unsigned_integral_max_value<SrcChannelV>::value );
             unsigned int const tmp       ( ( static_cast<unsigned short>( src ) << DestPackedNumBits ) - src );
@@ -135,11 +136,105 @@ struct channel_converter<SrcChannelV, packed_channel_value<DestPackedNumBits> >
 #endif
 
 
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class offset_view_t
+/// \todo document properly...
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class View, typename Offset>
+class offset_view_t
+{
+public:
+    typedef View   view_t  ;
+    typedef Offset offset_t;
+
+public:
+    offset_view_t( View const & view, Offset const & offset ) : view_( view ), offset_( offset ) {}
+
+    typename View::point_t dimensions() const
+    {
+        return offset_dimensions( original_view().dimensions(), offset() );
+    }
+
+    View   const & original_view() const { return view_  ; }
+    Offset const & offset       () const { return offset_; }
+
+private:
+    static typename View::point_t offset_dimensions
+    (
+        typename View::point_t                   view_dimensions,
+        typename View::point_t::value_type const offset
+    )
+    {
+        //return typename View::point_t( view_dimensions.x, view_dimensions.y + offset );
+        view_dimensions.y += offset;
+        return view_dimensions;
+    }
+
+    static typename View::point_t offset_dimensions
+    (
+        typename View::point_t         view_dimensions,
+        typename View::point_t const & offset
+    )
+    {
+        return view_dimensions += offset;
+    }
+
+private:
+    View                                     const & view_  ;
+    typename call_traits<Offset>::param_type         offset_;
+};
+
+
+template <class View, typename Offset>
+offset_view_t<View, Offset> offset_view( View const & view, Offset const & offset ) { return offset_view_t<View, Offset>( view, offset ); }
+
+
 namespace detail
 {
 //------------------------------------------------------------------------------
 
+#ifndef _UNICODE
+    typedef char    TCHAR;
+#else
+    typedef wchar_t TCHAR;
+#endif
 typedef iterator_range<TCHAR const *> string_chunk_t;
+
+
+template <class View, typename Offset>
+View const & original_view( offset_view_t<View, Offset> const & offset_view ) { return offset_view.original_view(); }
+
+template <class View>
+View const & original_view( View const & view ) { return view; }
+
+template <typename Offset, class View>
+Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
+
+template <typename Offset, class View>
+Offset get_offset( View const & ) { return Offset(); }
+
+
+template <class NewView, class View, typename Offset>
+offset_view_t<NewView, Offset> offset_new_view( NewView const & new_view, offset_view_t<View, Offset> const & offset_view )
+{
+    return offset_view_t<NewView, Offset>( new_view, offset_view.offset_ );
+}
+
+template <class NewView, class View>
+NewView const & offset_new_view( NewView const & new_view, View const & ) { return new_view; }
+
+
+template <typename View>
+struct get_original_view_t;
+
+template <typename Locator>
+struct get_original_view_t<image_view<Locator> > { typedef image_view<Locator> type; };
+
+template <typename View, typename Offset>
+struct get_original_view_t<offset_view_t<View, Offset> > { typedef View type; };
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -165,6 +260,13 @@ protected:
         return dimensions_mismatch( mine, view.dimensions() );
     }
 
+    template <class View, typename Offset>
+    static bool dimensions_mismatch( dimensions_t const & mine, offset_view_t<View, Offset> const & offset_view )
+    {
+        dimensions_t const other( offset_view.dimensions() );
+        return !( ( mine.x >= other.x ) && ( mine.y >= other.y ) );
+    }
+
     static void do_ensure_dimensions_match( dimensions_t const & mine, dimensions_t const & other )
     {
         io_error_if( dimensions_mismatch( mine, other ), "input view size does not match source image size" );
@@ -174,6 +276,12 @@ protected:
     static void do_ensure_dimensions_match( dimensions_t const & mine, View const & view )
     {
         do_ensure_dimensions_match( mine, view.dimensions() );
+    }
+
+    template <class View, typename Offset>
+    static void do_ensure_dimensions_match( dimensions_t const & mine, offset_view_t<View, Offset> const & offset_view )
+    {
+        io_error_if( dimensions_mismatch( mine, offset_view ), "input view size does not match source image size" );
     }
 
     static void do_ensure_formats_match( bool const formats_mismatch )
@@ -266,66 +374,6 @@ protected:
 };
 
 
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class offset_view_t
-/// \todo document properly...
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class View, typename Offset>
-class offset_view_t
-{
-public:
-    offset_view_t( View const & view, Offset const & offset ) : view_( view ), offset_( offset ) {}
-
-    typename View::point_t dimensions() const
-    {
-        return offset_dimensions( offset_ );
-    }
-
-    View   const & original_view() const { return view_  ; }
-    Offset const & offset       () const { return offset_; }
-
-private:
-    typename View::point_t offset_dimensions( typename View::point_t::value_type const offset ) const
-    {
-        typename View::point_t view_dimensions( view_.dimensions() );
-        return view_dimensions += typename View::point_t( 0, offset );
-    }
-
-    typename View::point_t  offset_dimensions( typename View::point_t const & offset ) const
-    {
-        typename View::point_t view_dimensions( view_.dimensions() );
-        return view_dimensions += offset;
-    }
-
-private:
-    View                                     const & view_  ;
-    typename call_traits<Offset>::param_type         offset_;
-};
-
-template <class View, typename Offset>
-View const & original_view( offset_view_t<View, Offset> const & offset_view ) { return offset_view.original_view(); }
-
-template <class View>
-View const & original_view( View const & view ) { return view; }
-
-template <typename Offset, class View>
-Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
-
-template <typename Offset, class View>
-Offset get_offset( View const & ) { return Offset(); }
-
-
-template <class NewView, class View, typename Offset>
-offset_view_t<NewView, Offset> offset_new_view( NewView const & new_view, offset_view_t<View, Offset> const & offset_view )
-{
-    return offset_view_t<NewView, Offset>( new_view, offset_view.offset_ );
-}
-
-template <class NewView, class View>
-NewView const & offset_new_view( NewView const & new_view, View const & ) { return new_view; }
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -410,6 +458,28 @@ private:
 
     typedef mpl::range_c<std::size_t, 0, mpl::size<supported_pixel_formats>::value> valid_type_id_range_t;
 
+    struct image_id_finder
+    {
+        image_id_finder( format_t const format ) : format_( format ), image_id_( static_cast<unsigned int>( -1 ) ) {}
+
+        template <typename ImageIndex>
+        void operator()( ImageIndex )
+        {
+            format_t const image_format
+            (
+                formatted_image_traits<Impl>::view_to_native_format::apply<typename mpl::at<supported_pixel_formats, ImageIndex>::type::view_t>::value
+            );
+            if ( image_format == this->format_ )
+            {
+                BOOST_ASSERT( image_id_ == -1 );
+                image_id_ = ImageIndex::value;
+            }
+        }
+
+        format_t /*const*/ format_;
+        unsigned int       image_id_;
+    };
+
 private:
     Impl       & impl()       { return static_cast<Impl       &>( *this ); }
     Impl const & impl() const { return static_cast<Impl const &>( *this ); }
@@ -418,7 +488,7 @@ protected:
     template <typename View>
     bool dimensions_mismatch( View const & view ) const
     {
-        return dimensions_mismatch( view.dimensions() );
+        return formatted_image_base::dimensions_mismatch( impl().dimensions(), view );
     }
 
     bool dimensions_mismatch( dimensions_t const & other_dimensions ) const
@@ -429,7 +499,7 @@ protected:
     template <class View>
     void do_ensure_dimensions_match( View const & view ) const
     {
-        formatted_image_base::do_ensure_dimensions_match( impl().dimensions(), view.dimensions() );
+        formatted_image_base::do_ensure_dimensions_match( impl().dimensions(), view );
     }
 
     template <typename View>
@@ -455,17 +525,29 @@ protected:
     template <typename View>
     bool can_do_inplace_transform( typename formatted_image_traits<Impl>::format_t const my_format ) const
     {
-        return ( Impl::format_size( my_format ) == sizeof( typename View::value_type ) );
+        return ( Impl::format_size( my_format ) == memunit_step( get_original_view_t<View>::type::x_iterator() )/*sizeof( typename get_original_view_t<View>::type::value_type )*/ );
+    }
+
+    // A generic implementation...impl classes are encouraged to provide more
+    // efficient overrides...
+    static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    {
+        // This (linear search) will be transformed to a switch...
+        image_id_finder finder( closest_gil_supported_format );
+        mpl::for_each<valid_type_id_range_t>( ref( finder ) );
+        BOOST_ASSERT( finder.image_id_ != -1 );
+        return finder.image_id_;
     }
 
 public: // Views...
     template <typename View>
-    void copy_to( View & view, assert_dimensions_match, assert_formats_match ) const
+    void copy_to( View const & view, assert_dimensions_match, assert_formats_match ) const
     {
+        BOOST_STATIC_ASSERT( View::value_type::is_mutable );
         BOOST_STATIC_ASSERT( formatted_image_traits<Impl>::is_supported<View>::value );
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
         BOOST_ASSERT( !impl().formats_mismatch<View>()    );
-        impl().raw_convert_to_prepared_view
+        impl().raw_copy_to_prepared_view
         (
             formatted_image_traits<Impl>::view_data_t
             (
@@ -476,57 +558,55 @@ public: // Views...
     }
 
     template <typename View>
-    void copy_to( View & view, assert_dimensions_match, ensure_formats_match ) const
+    void copy_to( View const & view, assert_dimensions_match, ensure_formats_match ) const
     {
         impl().do_ensure_formats_match<View>();
         impl().copy_to( view, assert_dimensions_match(), assert_formats_match() );
     }
 
     template <typename View>
-    void copy_to( View & view, ensure_dimensions_match, assert_formats_match ) const
+    void copy_to( View const & view, ensure_dimensions_match, assert_formats_match ) const
     {
         impl().do_ensure_dimensions_match( view );
         impl().copy_to( view, assert_dimensions_match(), assert_formats_match() );
     }
 
     template <typename View>
-    void copy_to( View & view, ensure_dimensions_match, ensure_formats_match ) const
+    void copy_to( View const & view, ensure_dimensions_match, ensure_formats_match ) const
     {
-        impl().do_ensure_formats_match<View>();
         impl().do_ensure_dimensions_match( view );
         impl().copy_to( view, assert_dimensions_match(), ensure_formats_match() );
     }
 
     template <typename View>
-    void copy_to( View & view, ensure_dimensions_match, synchronize_formats ) const
+    void copy_to( View const & view, ensure_dimensions_match, synchronize_formats ) const
     {
         impl().do_ensure_dimensions_match( view );
         impl().copy_to( view, assert_dimensions_match(), synchronize_formats() );
     }
 
     template <typename View>
-    void copy_to( View & view, assert_dimensions_match, synchronize_formats ) const
+    void copy_to( View const & view, assert_dimensions_match, synchronize_formats ) const
     {
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
-        impl().raw_convert_to_prepared_view
+        bool const can_use_raw
         (
-            formatted_image_traits<Impl>::view_data_t
-            (
-                original_view       ( view ),
-                get_offset<offset_t>( view )
-            )
+            formatted_image_traits<Impl>::is_supported<View>::value &&
+            formatted_image_traits<Impl>::builtin_conversion
         );
+        default_convert_to_worker( view, mpl::bool_<can_use_raw>() );
     }
 
+
     template <typename FormatConverter, typename View>
-    void copy_to( View & view, ensure_dimensions_match, FormatConverter const & format_converter ) const
+    void copy_to( View const & view, ensure_dimensions_match, FormatConverter const & format_converter ) const
     {
         impl().do_ensure_dimensions_match( view );
         impl().copy_to( view, assert_dimensions_match(), format_converter );
     }
 
     template <typename FormatConverter, typename View>
-    void copy_to( View & view, assert_dimensions_match, FormatConverter const & format_converter ) const
+    void copy_to( View const & view, assert_dimensions_match, FormatConverter const & format_converter ) const
     {
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
         impl().convert_to_prepared_view( view, format_converter );
@@ -580,63 +660,102 @@ public: // Images...
 
 private:
     template <class View, typename CC>
-    struct in_place_converter_t
+    class in_place_converter_t
     {
+    public:
         typedef void result_type;
 
-        in_place_converter_t( CC const & cc, View const & view ) : cc_( cc ), view_( view ) {}
+        in_place_converter_t( CC const & cc, View const & view ) : members_( cc, view ) {}
 
         template <std::size_t index>
-        void operator()( mpl::integral_c<std::size_t, index> const & ) const
+        void operator()( mpl::integral_c<std::size_t, index> ) const
         {
             typedef typename mpl::at_c<supported_pixel_formats, index>::type::view_t view_t;
-            BOOST_STATIC_ASSERT( sizeof( view_t ) == sizeof( View ) );
-            for_each_pixel( *gil_reinterpret_cast_c<view_t const *>( &view_ ), *this );
+            BOOST_ASSERT( is_planar<View>::value == is_planar<view_t>::value ); //zzz...make this a static assert...
+            if ( is_planar<View>::value )
+            {
+                for ( unsigned int plane( 0 ); plane < num_channels<View>::value; ++plane )
+                {
+                    BOOST_ASSERT( sizeof( view_t ) == sizeof( View ) ); //zzz...make this a static assert...
+                    for_each_pixel( nth_channel_view( *gil_reinterpret_cast_c<view_t const *>( &view() ), plane ), *this );
+                }
+            }
+            else
+            {
+                BOOST_ASSERT( sizeof( view_t ) == sizeof( View ) ); //zzz...make this a static assert...
+                for_each_pixel( *gil_reinterpret_cast_c<view_t const *>( &view() ), *this );
+            }
         }
 
         template <typename SrcP>
         typename enable_if<is_pixel<SrcP>>::type
         operator()( SrcP & srcP )
         {
-            BOOST_ASSERT( sizeof( SrcP ) == sizeof( typename View::value_type ) );
-            cc_( srcP, *gil_reinterpret_cast<typename View::value_type *>( &srcP ) );
+            convert_aux( srcP, is_planar<View>() );
         }
 
         void operator=( in_place_converter_t const & other )
         {
-            BOOST_ASSERT( this->view_ == other.view_ );
-            this->cc_ = other.cc_;
+            BOOST_ASSERT( this->view() == other.view() );
+            this->cc() = other.cc();
         }
 
-        CC cc_;
-        View const & view_;
+    private:
+        CC         & cc  ()       { return members_.first (); }
+        CC   const & cc  () const { return members_.first (); }
+        View const & view() const { return members_.second(); }
+
+        template <typename SrcP>
+        void convert_aux( SrcP & srcP, mpl::true_ /*is planar*/ )
+        {
+            typedef typename nth_channel_view_type<View>::type::value_type DstP;
+            BOOST_ASSERT( sizeof( SrcP ) == sizeof( DstP ) ); //zzz...make this a static assert...
+            cc()( srcP, *const_cast<DstP *>( gil_reinterpret_cast_c<DstP const *>( &srcP ) ) );
+        }
+
+        template <typename SrcP>
+        void convert_aux( SrcP & srcP, mpl::false_ /*is not planar*/ )
+        {
+            typedef typename View::value_type DstP;
+            BOOST_ASSERT( sizeof( SrcP ) == sizeof( DstP ) ); //zzz...make this a static assert...
+            cc()( srcP, *const_cast<DstP *>( gil_reinterpret_cast_c<DstP const *>( &srcP ) ) );
+        }
+
+    private:
+        compressed_pair<CC, View const &> members_;
     };
 
     template <class View, typename CC>
-    struct generic_converter_t
+    class generic_converter_t
     {
+    public:
         typedef void result_type;
 
         generic_converter_t( Impl const & impl, CC const & cc, View const & view )
-            : impl_( impl ), cc_( cc ), view_( view ) {}
+            : impl_( impl ), cc_view_( cc, view ) {}
 
         template <std::size_t index>
         void operator()( mpl::integral_c<std::size_t, index> const & ) const
         {
             typedef typename mpl::at_c<supported_pixel_formats, index>::type::view_t my_view_t;
-            impl_.generic_convert_to_prepared_view<my_view_t>( view_, cc_ );
+            impl_.generic_convert_to_prepared_view<my_view_t>( view(), cc() );
         }
 
         void operator=( generic_converter_t const & other )
         {
             BOOST_ASSERT( this->impl_ == other.impl_ );
             BOOST_ASSERT( this->view_ == other.view_ );
-            this->cc_ = other.cc_;
+            this->cc() = other.cc();
         }
 
-        Impl const & impl_;
-        CC           cc_  ;
-        View const & view_;
+    private:
+        CC         & cc  ()       { return cc_view_.first (); }
+        CC   const & cc  () const { return cc_view_.first (); }
+        View const & view() const { return cc_view_.second(); }
+
+    private:
+        Impl                              const & impl_   ;
+        compressed_pair<CC, View const &>         cc_view_;
     };
 
     template <class TargetView, class CC>
@@ -671,7 +790,7 @@ private:
             converter,
             mpl::bool_
             <
-                is_plain_in_memory_view<View>::value &&
+                is_plain_in_memory_view<typename get_original_view_t<View>::type>::value &&
                 formatted_image_traits<Impl>::is_supported<View>::value
             >()
         );
@@ -684,9 +803,9 @@ private:
         unsigned int const current_image_format_id( impl().image_format_id( my_format )   );
         if ( can_do_inplace_transform<View>( my_format ) )
         {
-            Impl::view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
+            typename formatted_image_traits<Impl>::view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
             view_data.set_format( my_format );
-            impl().copy_to_prepared_view( view_data );
+            impl().raw_copy_to_prepared_view( view_data );
             in_place_transform( current_image_format_id, original_view( view ), converter );
         }
         else
@@ -699,6 +818,25 @@ private:
     void convert_to_prepared_view_worker( View const & view, CC const & converter, mpl::false_ /*must use generic*/ ) const
     {
         generic_transform( Impl::image_format_id( impl().closest_gil_supported_format() ), view, converter );
+    }
+
+    template <typename View>
+    void default_convert_to_worker( View const & view, mpl::true_ /*can use raw*/ ) const
+    {
+        impl().raw_convert_to_prepared_view
+        (
+            formatted_image_traits<Impl>::view_data_t
+            (
+                original_view       ( view ),
+                get_offset<offset_t>( view )
+            )
+        );
+    }
+
+    template <typename View>
+    void default_convert_to_worker( View const & view, mpl::false_ /*cannot use raw*/ ) const
+    {
+        impl().convert_to_prepared_view( view, default_color_converter() );
     }
 };
 
