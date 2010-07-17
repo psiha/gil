@@ -337,6 +337,9 @@ public:
         return point2<std::ptrdiff_t>( decompressor().image_width, decompressor().image_height );
     }
 
+    jpeg_decompress_struct       & lib_object()       { return decompressor(); }
+    jpeg_decompress_struct const & lib_object() const { return const_cast<libjpeg_image &>( *this ).lib_object(); }
+
 
 private: // Private formatted_image_base interface.
     friend base_t;

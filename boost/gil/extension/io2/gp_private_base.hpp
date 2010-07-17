@@ -381,7 +381,8 @@ public:
     void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
     void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
 
-
+    ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
+    ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
 
 private: // Private formatted_image_base interface.
     friend base_t;

@@ -344,6 +344,10 @@ public:
 
     full_format_t::format_bitfield const & format_bits() const {return format_.bits; }
 
+
+    TIFF       & lib_object()       { return *p_tiff_; }
+    TIFF const & lib_object() const { return const_cast<libtiff_image &>( *this ).lib_object(); }
+
 private:
     template <typename T>
     T get_field( ttag_t const tag ) const
