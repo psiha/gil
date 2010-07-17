@@ -20,7 +20,7 @@
 #define gp_private_base_hpp__3B1ED5BC_42C6_4EC6_B700_01C1B8646431
 //------------------------------------------------------------------------------
 #include "../../gil_all.hpp"
-#include "extern_lib_guard.hpp"
+#include "detail/gp_extern_lib_guard.hpp"
 #include "formatted_image.hpp"
 #include "gp_private_istreams.hpp"
 #include "io_error.hpp"
@@ -30,7 +30,7 @@
 #include <boost/mpl/integral_c.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <boost/static_assert.hpp>
-#include "boost/type_traits/is_pod.hpp"
+#include <boost/type_traits/is_pod.hpp>
 
 #include <algorithm>
 //------------------------------------------------------------------------------
@@ -246,6 +246,8 @@ struct formatted_image_traits<gp_image>
             new ( optional_roi_.address() ) gp_roi( offset, Width, Height );
         }
 
+        void set_format( format_t const format ) { PixelFormat = format; }
+
         Gdiplus::Rect const * const p_roi_;
 
     private:
@@ -456,12 +458,13 @@ private: // Private formatted_image_base interface.
     }
 
 public:
-    template <typename View>
-    void generic_convert_to_prepared_view( View const & view ) const
+    template <class MyView, class TargetView, class Converter>
+    void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
         BOOST_ASSERT( !dimensions_mismatch( view ) );
         //BOOST_ASSERT( !formats_mismatch   ( view ) );
 
+        using namespace Gdiplus;
         BitmapData bitmapData;
         Rect const rect( 0, 0, bitmapData.Width, bitmapData.Height );
         ensure_result
@@ -471,17 +474,18 @@ public:
                 pBitmap_,
                 &rect,
                 ImageLockModeRead,
-                view_gp_format::apply<View>::value,
+                view_gp_format::apply<MyView>::value,
                 &bitmapData
             )
         );
+        assert( !"converter" );
         copy_pixels // This must not throw!
         (
             interleaved_view
             (
                 bitmapData.Width ,
                 bitmapData.Height,
-                gil_reinterpret_cast_c<typename View::value_type const *>( bitmapData.Scan0 ),
+                gil_reinterpret_cast_c<typename MyView::value_type const *>( bitmapData.Scan0 ),
                 bitmapData.Stride
             ),
             view
