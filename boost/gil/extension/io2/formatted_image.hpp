@@ -31,6 +31,7 @@
 #include <boost/detail/endian.hpp>
 #endif // _DEBUG
 #include <boost/mpl/eval_if.hpp>
+#include <boost/mpl/for_each.hpp>
 #include <boost/mpl/integral_c.hpp>
 #ifdef _DEBUG
 #include <boost/numeric/conversion/converter.hpp>

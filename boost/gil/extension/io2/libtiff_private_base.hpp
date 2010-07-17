@@ -26,6 +26,7 @@
     ...error...libtiff support requires mpl vectors of size 35...
 #endif
 
+#include <boost/array.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
 
@@ -234,7 +235,7 @@ struct tiff_view_data_t
     }
 
     generic_vertical_roi::offset_t         offset_;
-    point_t                        const & dimensions_;
+    point2<std::ptrdiff_t>         const & dimensions_;
     unsigned int                           stride_;
     unsigned int                           number_of_planes_;
     array<unsigned char *, 4>              plane_buffers_;
@@ -425,7 +426,7 @@ private: // Private formatted_image_base interface.
     friend base_t;
     struct tile_setup_t : noncopyable
     {
-        tile_setup_t( libtiff_image const & source, point_t const & dimensions, offset_t const offset, bool const nptcc )
+        tile_setup_t( libtiff_image const & source, point2<std::ptrdiff_t> const & dimensions, offset_t const offset, bool const nptcc )
             :
             tile_height                ( source.get_field<uint32>( TIFFTAG_TILELENGTH ) ),
             tile_width                 ( source.get_field<uint32>( TIFFTAG_TILEWIDTH  ) ),
@@ -631,7 +632,7 @@ private: // Private formatted_image_base interface.
 
         unsigned int const number_of_planes( is_planar<MyView>::value ? num_channels<MyView>::value : 1 );
 
-        point_t const & dimensions( original_view( view ).dimensions() );
+        point2<std::ptrdiff_t> const & dimensions( original_view( view ).dimensions() );
 
         ////////////////////////////////////////////////////////////////////////
         // Tiled
