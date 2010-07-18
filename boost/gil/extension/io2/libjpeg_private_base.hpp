@@ -228,6 +228,8 @@ struct formatted_image_traits<libjpeg_image>
     struct is_supported : mpl::bool_<view_libjpeg_format::apply<View>::value != JCS_UNKNOWN> {};
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = sizeof( void * ) );
+
+    BOOST_STATIC_CONSTANT( bool, builtin_conversion = true );
 };
 
 

@@ -44,20 +44,12 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-#if (GDIPVER >= 0x0110)
-Gdiplus::PixelFormat const cmyk_format( PixelFormat32bppCMYK | PixelFormatGDI );
-#undef PixelFormat32bppCMYK
-#define PixelFormat32bppCMYK cmyk_format
-#else
-#undef PixelFormat32bppCMYK
-#endif // (GDIPVER >= 0x0110)
-
 template <Gdiplus::PixelFormat gp_format> struct is_canonical            : mpl::bool_ <(gp_format & PixelFormatCanonical) != 0> {};
 template <Gdiplus::PixelFormat gp_format> struct is_extended             : mpl::bool_ <(gp_format & PixelFormatExtended ) != 0> {};
 template <Gdiplus::PixelFormat gp_format> struct is_indexed              : mpl::bool_ <(gp_format & PixelFormatIndexed  ) != 0> {};
-template <Gdiplus::PixelFormat gp_format> struct is_supported            : mpl::bool_ <(gp_format & PixelFormatGDI      ) != 0> {};
 template <Gdiplus::PixelFormat gp_format> struct has_alpha               : mpl::bool_ <(gp_format & PixelFormatAlpha    ) != 0> {};
 template <Gdiplus::PixelFormat gp_format> struct has_premultiplied_alpha : mpl::bool_ <(gp_format & PixelFormatPAlpha   ) != 0> {};
+template <Gdiplus::PixelFormat gp_format> struct is_supported            : mpl::bool_ <(gp_format & PixelFormatGDI      ) != 0 || ( ( gp_format == PixelFormat32bppCMYK ) && ( GDIPVER >= 0x0110 ) )> {};
 template <Gdiplus::PixelFormat gp_format> struct pixel_size              : mpl::size_t<( gp_format >> 8 ) & 0xff              > {};
 
 
@@ -254,12 +246,12 @@ struct formatted_image_traits<gp_image>
         template <typename View>
         void set_bitmapdata_for_view( View const & view )
         {
-            Width    = view.width();
-            Height   = view.height();
-            Stride   = view.pixels().row_size();
-            PixelFormat   = view_gp_format::apply<View>::value;
-            Scan0    = formatted_image_base::get_raw_data( view );
-            Reserved = 0;
+            Width       = view.width();
+            Height      = view.height();
+            Stride      = view.pixels().row_size();
+            PixelFormat = view_gp_format::apply<View>::value;
+            Scan0       = formatted_image_base::get_raw_data( view );
+            Reserved    = 0;
         }
 
         void operator=( view_data_t const & );
@@ -268,7 +260,8 @@ struct formatted_image_traits<gp_image>
         aligned_storage<sizeof( gp_roi ), alignment_of<gp_roi>::value>::type optional_roi_;
     };
 
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = sizeof( Gdiplus::ARGB ) );
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( Gdiplus::ARGB ) );
+    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true                    );
 };
 
 
@@ -422,11 +415,13 @@ private: // Private formatted_image_base interface.
                 return
                     PixelFormat16bppRGB565;
 
-            #if (GDIPVER >= 0x0110)
-            case PixelFormat32bppCMYK     :
+            case PixelFormat32bppCMYK:
                 return
+                #if (GDIPVER >= 0x0110)
                     PixelFormat32bppCMYK;
-            #endif // (GDIPVER >= 0x0110)
+                #else
+                    PixelFormat24bppRGB;
+                #endif // (GDIPVER >= 0x0110)
 
             default:
                 BOOST_ASSERT( !"Should not get reached." ); __assume( false );
@@ -446,10 +441,9 @@ private: // Private formatted_image_base interface.
         {
             case PixelFormat24bppRGB      : return 0;
             case PixelFormat32bppARGB     : return 1;
-            case PixelFormat16bppGrayScale: return 2;
-            case PixelFormat16bppRGB565   : return 3;
+            case PixelFormat16bppRGB565   : return 2;
             #if (GDIPVER >= 0x0110)
-            case PixelFormat32bppCMYK     : return 4;
+            case PixelFormat32bppCMYK     : return 3;
             #endif
 
             default:
@@ -466,21 +460,22 @@ public:
         //BOOST_ASSERT( !formats_mismatch   ( view ) );
 
         using namespace Gdiplus;
+        point2<std::ptrdiff_t> const & targetDimensions( original_view( view ).dimensions() );
+        gp_roi const roi( get_offset<gp_roi::offset_t>( view ), targetDimensions.x, targetDimensions.y );
         BitmapData bitmapData;
-        Rect const rect( 0, 0, bitmapData.Width, bitmapData.Height );
         ensure_result
         (
             DllExports::GdipBitmapLockBits
             (
                 pBitmap_,
-                &rect,
+                &roi,
                 ImageLockModeRead,
                 view_gp_format::apply<MyView>::value,
                 &bitmapData
             )
         );
-        assert( !"converter" );
-        copy_pixels // This must not throw!
+        BOOST_ASSERT( bitmapData.PixelFormat == view_gp_format::apply<MyView>::value );
+        copy_and_convert_pixels // This must not throw!
         (
             interleaved_view
             (
@@ -489,7 +484,8 @@ public:
                 gil_reinterpret_cast_c<typename MyView::value_type const *>( bitmapData.Scan0 ),
                 bitmapData.Stride
             ),
-            view
+            view,
+            converter
         );
         verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &bitmapData ) );
     }
