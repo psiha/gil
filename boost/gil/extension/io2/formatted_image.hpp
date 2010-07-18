@@ -454,7 +454,7 @@ private:
     struct write_is_supported
     {
         template<typename View>
-        struct apply : public Impl::is_supported<View> {};
+        struct apply : public formatted_image_traits<Impl>::is_supported<View> {};
     };
 
     typedef mpl::range_c<std::size_t, 0, mpl::size<supported_pixel_formats>::value> valid_type_id_range_t;
