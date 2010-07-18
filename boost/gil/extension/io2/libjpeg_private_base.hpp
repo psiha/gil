@@ -133,9 +133,9 @@ protected:
     jmp_buf & error_handler_target() const { return longjmp_target_; }
 
     jpeg_common_struct           & common      ()       { return *gil_reinterpret_cast<j_common_ptr>( &libjpeg_object.compressor_ ); }
-    jpeg_common_struct     const & common      () const { return const_cast<libjpeg_base &>( *this ).common(); }
+    jpeg_common_struct     const & common      () const { return const_cast<libjpeg_base &>( *this ).common      (); }
     jpeg_compress_struct         & compressor  ()       { return libjpeg_object.compressor_  ; }
-    jpeg_compress_struct   const & compressor  () const { return const_cast<libjpeg_base &>( *this ).compressor(); }
+    jpeg_compress_struct   const & compressor  () const { return const_cast<libjpeg_base &>( *this ).compressor  (); }
     jpeg_decompress_struct       & decompressor()       { return libjpeg_object.decompressor_; }
     jpeg_decompress_struct const & decompressor() const { return const_cast<libjpeg_base &>( *this ).decompressor(); }
 
@@ -246,9 +246,6 @@ public:
         #ifdef _DEBUG
         switch ( current_format )
         {
-            default:
-                BOOST_ASSERT( !"Unknown format code." );
-
             case JCS_RGB      :
             case JCS_YCbCr    :
             case JCS_CMYK     :
@@ -256,6 +253,9 @@ public:
             case JCS_GRAYSCALE:
             case JCS_UNKNOWN  :
                 break;
+
+            default:
+                BOOST_ASSERT( !"Unknown format code." );
         }
         #endif
 
@@ -289,10 +289,6 @@ public:
     {
         switch ( format )
         {
-            default:
-                BOOST_ASSERT( !"Invalid or unknown format specified." ); __assume( false );
-                return 0;
-
             case JCS_RGB:
             case JCS_YCbCr:
                 return 3;
@@ -301,6 +297,10 @@ public:
                 return 4;
             case JCS_GRAYSCALE:
                 return 1;
+
+            default:
+                BOOST_ASSERT( !"Invalid or unknown format specified." ); __assume( false );
+                return 0;
         }
     }
 
