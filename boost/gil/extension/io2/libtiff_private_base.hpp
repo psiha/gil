@@ -261,6 +261,8 @@ private: // this should probably go to the base formatted_image class...
         number_of_planes_ = 1;
         plane_buffers_[ 0 ] = formatted_image_base::get_raw_data( view );
     }
+
+    void operator=( tiff_view_data_t const & );
 };
 
 class libtiff_image;
@@ -446,17 +448,22 @@ private: // Private formatted_image_base interface.
             current_row_tiles_remaining( tiles_per_row ),
             starting_tile              ( offset / tile_height * tiles_per_row ),
             rows_to_skip               ( offset % tile_height ),
-            end_rows_to_read           ( modulo_unless_zero( dimensions.y - ( tile_height - rows_to_skip ), tile_height ) ),
-            number_of_tiles            ( round_up_divide( dimensions.y, tile_height ) * tiles_per_row * ( source.format_bits().planar_configuration == PLANARCONFIG_SEPARATE ? source.format_bits().samples_per_pixel : 1 ) ),
-            rows_to_read_per_tile      ( tile_height )
+            number_of_tiles            ( round_up_divide( dimensions.y, tile_height ) * tiles_per_row * ( source.format_bits().planar_configuration == PLANARCONFIG_SEPARATE ? source.format_bits().samples_per_pixel : 1 ) )
         {
             BOOST_ASSERT( static_cast<tsize_t>( tile_width_bytes ) == ::TIFFTileRowSize( source.p_tiff_ ) );
             BOOST_ASSERT( static_cast<tsize_t>( tile_size_bytes  ) == ::TIFFTileSize   ( source.p_tiff_ ) );
             BOOST_ASSERT( starting_tile + number_of_tiles <= ::TIFFNumberOfTiles( source.p_tiff_ ) );
+            if ( tile_height > static_cast<uint32>( dimensions.y ) )
+            {
+                rows_to_read_per_tile = end_rows_to_read = dimensions.y;
+            }
+            else
+            {
+                end_rows_to_read = modulo_unless_zero( dimensions.y - ( tile_height - rows_to_skip ), tile_height );
+                bool const starting_at_last_row( ( number_of_tiles - starting_tile ) <= tiles_per_row );
+                rows_to_read_per_tile = starting_at_last_row ? end_rows_to_read : tile_height;
+            }
 
-            if ( ( number_of_tiles - starting_tile ) <= tiles_per_row ) //...starting at last row...
-                rows_to_read_per_tile = end_rows_to_read;
-            //TIFFComputeTile( source.p_tiff_, dimensions.x - 1, dimensions.y - 1, 0, 3 );
             #ifdef _DEBUG
                 std::memset( p_tile_buffer.get(), 0xFF, tile_size_bytes * ( nptcc ? source.format_bits().samples_per_pixel : 1 ) );
             #endif // _DEBUG
@@ -479,8 +486,8 @@ private: // Private formatted_image_base interface.
         unsigned int       current_row_tiles_remaining;
         ttile_t      const starting_tile              ;
         unsigned int       rows_to_skip               ;
-        unsigned int const end_rows_to_read           ;
         ttile_t      const number_of_tiles            ;
+        unsigned int /*const*/ end_rows_to_read           ;
         unsigned int       rows_to_read_per_tile      ;
 
     private:
@@ -533,7 +540,6 @@ private: // Private formatted_image_base interface.
                 for ( current_tile += setup.starting_tile; current_tile < setup.number_of_tiles; ++current_tile )
                 {
                     bool         const last_row_tile        ( !--setup.current_row_tiles_remaining                                     );
-                    unsigned int const this_tile_size_bytes ( last_row_tile ? setup.last_row_tile_size_bytes  : setup.tile_size_bytes  );
                     unsigned int const this_tile_width_bytes( last_row_tile ? setup.last_row_tile_width_bytes : setup.tile_width_bytes );
 
                     result.accumulate_equal( ::TIFFReadEncodedTile( p_tiff_, current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
@@ -644,9 +650,6 @@ private: // Private formatted_image_base interface.
 
         if ( ::TIFFIsTiled( p_tiff_ ) )
         {
-            unsigned int const row_alignement_tail( original_view( view ).pixels().row_size() - original_view( view ).pixels().pixel_size() * dimensions.x );
-            row_alignement_tail;
-
             tile_setup_t setup
             (
                 *this,
@@ -679,9 +682,8 @@ private: // Private formatted_image_base interface.
 
                 for ( current_tile += setup.starting_tile; current_tile < tiles_per_plane; ++current_tile )
                 {
-                    bool         const last_row_tile        ( !--setup.current_row_tiles_remaining                                     );
-                    //unsigned int const this_tile_size_bytes ( last_row_tile ? setup.last_row_tile_size_bytes  : setup.tile_size_bytes  );
-                    unsigned int const this_tile_width      ( last_row_tile ? setup.last_row_tile_width       : setup.tile_width       );
+                    bool         const last_row_tile  ( !--setup.current_row_tiles_remaining                         );
+                    unsigned int const this_tile_width( last_row_tile ? setup.last_row_tile_width : setup.tile_width );
 
                     for ( unsigned int channel_tile( 0 ); channel_tile < number_of_planes; ++channel_tile )
                     {
@@ -718,7 +720,7 @@ private: // Private formatted_image_base interface.
                     }
                     if ( last_row_tile )
                     {
-                        p_target += ( setup.rows_to_read_per_tile/* - 1*/ - setup.rows_to_skip );
+                        p_target += ( setup.rows_to_read_per_tile /*- 1*/ - setup.rows_to_skip );
                         setup.rows_to_skip = 0;
                         setup.current_row_tiles_remaining = setup.tiles_per_row;
                         bool const next_row_is_last_row( ( tiles_per_plane - ( current_tile + 1 ) ) == setup.tiles_per_row );
