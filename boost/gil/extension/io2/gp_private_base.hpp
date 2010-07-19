@@ -310,7 +310,6 @@ private:
         boost::array<wchar_t, MAX_PATH> wideFileName_;
     };
 
-
 public: /// \ingroup Construction
     explicit gp_image( wchar_t const * const filename )
     {

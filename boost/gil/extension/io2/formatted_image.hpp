@@ -526,7 +526,7 @@ protected:
     template <typename View>
     bool can_do_inplace_transform( typename formatted_image_traits<Impl>::format_t const my_format ) const
     {
-        return ( Impl::format_size( my_format ) == memunit_step( get_original_view_t<View>::type::x_iterator() )/*sizeof( typename get_original_view_t<View>::type::value_type )*/ );
+        return ( Impl::format_size( my_format ) == static_cast<std::size_t>( memunit_step( get_original_view_t<View>::type::x_iterator() ) ) );
     }
 
     // A generic implementation...impl classes are encouraged to provide more
