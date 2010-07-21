@@ -1,5 +1,23 @@
-#ifndef libx_shared_h__
-#define libx_shared_h__
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \file libx_shared.hpp
+/// ---------------------
+///
+/// Common functionality for LibPNG, LibJPEG and LibTIFF backends.
+///
+/// Copyright (c) Domagoj Saric 2010.
+///
+///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  (See accompanying file LICENSE_1_0.txt or copy at
+///  http://www.boost.org/LICENSE_1_0.txt)
+///
+/// For more information, see http://www.boost.org
+///
+////////////////////////////////////////////////////////////////////////////////
+//------------------------------------------------------------------------------
+#pragma once
+#ifndef libx_shared_hpp__ABC7759A_4313_4BFF_B64F_D72BBF2355E8
+#define libx_shared_hpp__ABC7759A_4313_4BFF_B64F_D72BBF2355E8
 //------------------------------------------------------------------------------
 #include "../../../utilities.hpp"
 
@@ -48,5 +66,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-
-#endif // libx_shared_h__
+#endif // libx_shared_hpp
