@@ -14,8 +14,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef libtiff_private_base_hpp__ARGH6951_A00F_4E0D_9783_488A49B1CA2B
-#define libtiff_private_base_hpp__ARGH6951_A00F_4E0D_9783_488A49B1CA2B
+#ifndef libtiff_private_base_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
+#define libtiff_private_base_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
 #include "io_error.hpp"
