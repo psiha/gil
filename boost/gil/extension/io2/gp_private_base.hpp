@@ -21,8 +21,9 @@
 //------------------------------------------------------------------------------
 #include "../../gil_all.hpp"
 #include "detail/gp_extern_lib_guard.hpp"
+#include "detail/windows_shared.hpp"
+#include "detail/windows_shared_istreams.hpp"
 #include "formatted_image.hpp"
-#include "gp_private_istreams.hpp"
 #include "io_error.hpp"
 
 #include <boost/array.hpp>
@@ -101,7 +102,7 @@ struct view_gp_format
 typedef iterator_range<TCHAR const *> string_chunk_t;
 
 
-string_chunk_t error_string( Gdiplus::GpStatus const status )
+/*string_chunk_t*/char const * error_string( Gdiplus::GpStatus const status )
 {
     using namespace Gdiplus;
     switch ( status )
@@ -131,19 +132,19 @@ string_chunk_t error_string( Gdiplus::GpStatus const status )
     // Programmer errors:
     switch ( status )
     {
-        case Ok                        : assert( !"Should not be called for no error" ); __assume( false );
-        case InvalidParameter          : assert( !"Invalid parameter"                 ); __assume( false );
-        case WrongState                : assert( !"Object in wrong state"             ); __assume( false );
-        case GdiplusNotInitialized     : assert( !"GDI+ not initialized"              ); __assume( false );
+        case Ok                        : BOOST_ASSERT( !"Should not be called for no error" ); __assume( false ); break;
+        case InvalidParameter          : BOOST_ASSERT( !"Invalid parameter"                 ); __assume( false ); break;
+        case WrongState                : BOOST_ASSERT( !"Object in wrong state"             ); __assume( false ); break;
+        case GdiplusNotInitialized     : BOOST_ASSERT( !"GDI+ not initialized"              ); __assume( false ); break;
 
-        default: assert( !"Unknown GDI+ status code." ); __assume( false );
+        default: BOOST_ASSERT( !"Unknown GDI+ status code." ); __assume( false ); break;
     }
 }
 
 inline void ensure_result( Gdiplus::GpStatus const result )
 {
     if ( result != Gdiplus::Ok )
-        io_error( error_string( result ).begin() );
+        io_error( error_string( result )/*.begin()*/ );
 }
 
 inline void verify_result( Gdiplus::GpStatus const result )
@@ -151,32 +152,6 @@ inline void verify_result( Gdiplus::GpStatus const result )
     BOOST_VERIFY( result == Gdiplus::Ok );
 }
 
-
-inline gp_initialize_guard::gp_initialize_guard()
-{
-    using namespace Gdiplus;
-
-    #if (GDIPVER >= 0x0110)
-        GdiplusStartupInputEx const gp_startup_input( GdiplusStartupNoSetRound, 0, true, true );
-    #else
-        GdiplusStartupInput   const gp_startup_input(                           0, true, true );
-    #endif //(GDIPVER >= 0x0110)
-    GdiplusStartupOutput gp_startup_output;
-    ensure_result
-    (
-        GdiplusStartup
-        (
-            &gp_token_,
-            &gp_startup_input,
-            &gp_startup_output
-        )
-    );
-}
-
-inline gp_initialize_guard::~gp_initialize_guard()
-{
-    Gdiplus::GdiplusShutdown( gp_token_ );
-}
 
 
 class gp_guard
@@ -275,41 +250,6 @@ class gp_image
     private gp_guard,
     public  detail::formatted_image<gp_image>
 {
-public:
-    static std::size_t format_size( format_t const format )
-    {
-        return Gdiplus::GetPixelFormatSize( format );
-    }
-
-private:
-    // - GP wants wide-char paths
-    // - we received a narrow-char path
-    // - we are using GP that means we are also using Windows
-    // - on Windows a narrow-char path can only be up to MAX_PATH in length:
-    //  http://msdn.microsoft.com/en-us/library/aa365247(VS.85).aspx#maxpath
-    // - it is therefore safe to use a fixed sized/stack buffer...
-    class wide_path
-    {
-    public:
-        explicit wide_path( char const * const pFilename )
-        {
-            BOOST_ASSERT( pFilename );
-            BOOST_ASSERT( std::strlen( pFilename ) < wideFileName_.size() );
-            char    const * pSource     ( pFilename             );
-            wchar_t       * pDestination( wideFileName_.begin() );
-            do
-            {
-                *pDestination++ = *pSource;
-            } while ( *pSource++ );
-            BOOST_ASSERT( pDestination < wideFileName_.end() );
-        }
-
-        operator wchar_t const * () const { return wideFileName_.begin(); }
-
-    private:
-        boost::array<wchar_t, MAX_PATH> wideFileName_;
-    };
-
 public: /// \ingroup Construction
     explicit gp_image( wchar_t const * const filename )
     {
@@ -369,6 +309,10 @@ public:
         return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
     }
 
+    static std::size_t format_size( format_t const format )
+    {
+        return Gdiplus::GetPixelFormatSize( format );
+    }
 
     void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
     void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
@@ -426,7 +370,6 @@ private: // Private formatted_image_base interface.
                 BOOST_ASSERT( !"Should not get reached." ); __assume( false );
                 return PixelFormatUndefined;
         }
-
     }
 
     image_type_id current_image_format_id() const
@@ -451,7 +394,7 @@ private: // Private formatted_image_base interface.
         }
     }
 
-public:
+private:
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
@@ -523,7 +466,6 @@ public:
         //BOOST_ASSERT( view_data.PixelFormat ==                    format    ()     );
         raw_convert_to_prepared_view( view_data );
     }
-
 
 private:
     static CLSID const & png_codec()
@@ -636,7 +578,7 @@ class gp_view_base : noncopyable
 public:
     ~gp_view_base()
     {
-        verify_result( Gdiplus::DllExports::GdipBitmapUnlockBits( &bitmap_, &bitmapData_ ) );
+        detail::verify_result( Gdiplus::DllExports::GdipBitmapUnlockBits( &bitmap_, &bitmapData_ ) );
     }
 
 protected:

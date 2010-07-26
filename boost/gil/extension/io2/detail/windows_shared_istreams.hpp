@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file gp_private_istreams.hpp
-/// -----------------------------
+/// \file windows_shared_istreams.hpp
+/// ---------------------------------
 ///
 /// Helper IStream implementations for in-memory and FILE base IO.
 ///
@@ -16,8 +16,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef gp_private_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
-#define gp_private_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
+#ifndef windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
+#define windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 //------------------------------------------------------------------------------
 #include <boost/range/iterator_range.hpp>
 
@@ -249,6 +249,7 @@ private:
 typedef iterator_range<unsigned char const *> memory_chunk_t;
 typedef iterator_range<unsigned char       *> writable_memory_chunk_t;
 
+
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// \class MemoryStreamBase
@@ -377,4 +378,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // gp_private_istreams_hpp
+#endif // windows_shared_istreams_hpp

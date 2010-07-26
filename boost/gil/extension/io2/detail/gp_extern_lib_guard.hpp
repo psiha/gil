@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file extern_lib_guard.hpp
-/// --------------------------
+/// \file gp_extern_lib_guard.hpp
+/// -----------------------------
 ///
 /// Copyright (c) Domagoj Saric 2010.
 ///
@@ -13,8 +13,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef extern_lib_guard_hpp__5C845C6C_F8AE_422B_A041_BA78815FCDD3
-#define extern_lib_guard_hpp__5C845C6C_F8AE_422B_A041_BA78815FCDD3
+#ifndef gp_extern_lib_guard_hpp__5C845C6C_F8AE_422B_A041_BA78815FCDD3
+#define gp_extern_lib_guard_hpp__5C845C6C_F8AE_422B_A041_BA78815FCDD3
 //------------------------------------------------------------------------------
 #include "extern_lib.hpp"
 #include "io_error.hpp"
@@ -40,29 +40,25 @@ namespace gil
 {
 //------------------------------------------------------------------------------
 
-#ifndef BOOST_GIL_EXTERNAL_LIB
-    //#define BOOST_GIL_EXTERNAL_LIB DynamicLinkAutoLoadAutoInitialize
-    #define BOOST_GIL_EXTERNAL_LIB ( BOOST_LIB_LINK_RUNTIME_AUTO_LOAD, BOOST_LIB_LOADING_RELOADABLE, BOOST_LIB_INIT_AUTO )
-#endif // BOOST_GIL_EXTERNAL_LIB
-
-
 #if BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_LINK_LOADTIME_OR_STATIC
 
     #pragma comment( lib, "gdiplus.lib" )
     //...consider adding specific version support via embedded manifests like this:
     //#pragma comment(linker, "\"/manifestdependency:type='Win32' name='Microsoft.Windows.GdiPlus' version='1.1.6001.22170' processorArchitecture='X86' publicKeyToken='6595b64144ccf1df' language='*'\"" )
 
-    struct gp_guard_base {};
-
     namespace detail
     {
+        struct gp_guard_base {};
+
         typedef dummy_lib_guard gil_io_lib_guard_base;
     }
 
-#else // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_LINK_LOADTIME_OR_STATIC
+#else // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) != BOOST_LIB_LINK_LOADTIME_OR_STATIC
 
 } // namespace gil
 
+/// \todo This 'configurability' needs to be handled better.
+///                                           (23.07.2010.) (Domagoj Saric)
 inline void win32_lib_handle::ensure() const
 {
     gil::io_error_if( !lib_handle(), "Boost.GIL failed to load external library." );
@@ -94,12 +90,12 @@ BOOST_DELAYED_EXTERN_LIB_GUARD
     (( ALWAYS, VOID           , WINAPI, GdiplusShutdown    , ( ULONG_PTR )                                                                                                                                 ))
     (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromStreamICM ), ( IStream * )( Gdiplus::GpBitmap ** )                                                                                                         ))
     (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromFileICM   ), ( GDIPCONST WCHAR* )( Gdiplus::GpBitmap ** )                                                                                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipDisposeImage              ), ( Gdiplus::GpImage * )                                                                                                                        ))
-    (( ALWAYS, GP_FUNCTION( GdipGetImageDimension         ), ( Gdiplus::GpImage * )( Gdiplus::REAL * )( Gdiplus::REAL * )                                                                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipGetImagePixelFormat       ), ( Gdiplus::GpImage * )( Gdiplus::PixelFormat * )                                                                                              ))
-    (( ALWAYS, GP_FUNCTION( GdipBitmapLockBits            ), ( Gdiplus::GpBitmap* )( GDIPCONST Gdiplus::GpRect* )( UINT )( Gdiplus::PixelFormat )( Gdiplus::BitmapData* )                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipBitmapUnlockBits          ), ( Gdiplus::GpBitmap* )( Gdiplus::BitmapData* )                                                                                                ))
-    (( ALWAYS, GP_FUNCTION( GdipSaveImageToFile           ), ( Gdiplus::GpImage * )( GDIPCONST WCHAR* )( GDIPCONST CLSID* )( GDIPCONST Gdiplus::EncoderParameters* )                                       ))
+    (( ALWAYS, GP_FUNCTION( GdipDisposeImage              ), ( Gdiplus::GpImage  * )                                                                                                                        ))
+    (( ALWAYS, GP_FUNCTION( GdipGetImageDimension         ), ( Gdiplus::GpImage  * )( Gdiplus::REAL * )( Gdiplus::REAL * )                                                                                  ))
+    (( ALWAYS, GP_FUNCTION( GdipGetImagePixelFormat       ), ( Gdiplus::GpImage  * )( Gdiplus::PixelFormat * )                                                                                              ))
+    (( ALWAYS, GP_FUNCTION( GdipBitmapLockBits            ), ( Gdiplus::GpBitmap * )( GDIPCONST Gdiplus::GpRect* )( UINT )( Gdiplus::PixelFormat )( Gdiplus::BitmapData* )                                  ))
+    (( ALWAYS, GP_FUNCTION( GdipBitmapUnlockBits          ), ( Gdiplus::GpBitmap * )( Gdiplus::BitmapData* )                                                                                                ))
+    (( ALWAYS, GP_FUNCTION( GdipSaveImageToFile           ), ( Gdiplus::GpImage  * )( GDIPCONST WCHAR* )( GDIPCONST CLSID* )( GDIPCONST Gdiplus::EncoderParameters* )                                       ))
     (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromScan0     ), ( INT )( INT )( INT )( Gdiplus::PixelFormat )( BYTE * )( Gdiplus::GpBitmap** )                                                                ))
     (( GP1_1 , GP_FUNCTION( GdipInitializePalette         ), ( OUT Gdiplus::ColorPalette * )( Gdiplus::PaletteType )( INT )( BOOL )( Gdiplus::GpBitmap * )                                                 ))
     (( GP1_1 , GP_FUNCTION( GdipBitmapConvertFormat       ), ( IN Gdiplus::GpBitmap * )( Gdiplus::PixelFormat )( Gdiplus::DitherType )( Gdiplus::PaletteType )( Gdiplus::ColorPalette * )( Gdiplus::REAL ) ))
@@ -111,15 +107,18 @@ BOOST_DELAYED_EXTERN_LIB_GUARD
 
 }
 
-// ...argh...GDI+ puts all functions in the DllExports namespace (hides the
-// 'flat API') except the following two. The BOOST_DELAYED_EXTERN_LIB_GUARD
-// macro does not support that level of customization so we must trivially
-// reimplement these two here...
+// Implementation note:
+//   GDI+ puts all functions in the DllExports namespace (hides the 'flat API')
+// except the following two. The BOOST_DELAYED_EXTERN_LIB_GUARD macro does not
+// support that level of customization so we must trivially reimplement these
+// two here...
+//                                            (23.07.2010.) (Domagoj Saric)
+
 extern "C" Status WINAPI GdiplusStartup 
 (
-    OUT ULONG_PTR * const token,
-    const GdiplusStartupInput * const input,
-    OUT GdiplusStartupOutput * const output
+    OUT ULONG_PTR                  * const token,
+    IN  GdiplusStartupInput  const * const input,
+    OUT GdiplusStartupOutput       * const output
 )
 {
     return DllExports::GdiplusStartup( token, input, output );
@@ -185,6 +184,35 @@ namespace detail
     private:
         ULONG_PTR gp_token_;
     };
+
+    void ensure_result( Gdiplus::GpStatus );
+
+    inline gp_initialize_guard::gp_initialize_guard()
+    {
+        using namespace Gdiplus;
+
+        #if (GDIPVER >= 0x0110)
+            GdiplusStartupInputEx const gp_startup_input( GdiplusStartupNoSetRound, 0, true, true );
+        #else
+            GdiplusStartupInput   const gp_startup_input(                           0, true, true );
+        #endif //(GDIPVER >= 0x0110)
+        GdiplusStartupOutput gp_startup_output;
+        ensure_result
+        (
+            GdiplusStartup
+            (
+                &gp_token_,
+                &gp_startup_input,
+                &gp_startup_output
+            )
+        );
+    }
+
+    inline gp_initialize_guard::~gp_initialize_guard()
+    {
+        Gdiplus::GdiplusShutdown( gp_token_ );
+    }
+
 } // namespace detail
 
 class gil_io_lib_guard
@@ -204,4 +232,4 @@ public:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // extern_lib_guard_hpp
+#endif // gp_extern_lib_guard_hpp

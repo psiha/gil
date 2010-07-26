@@ -382,6 +382,12 @@ BOOST_PP_SEQ_FOR_EACH( BOOST_DELAYED_EXTERN_LIB_FUNCTION_IMPLEMENTATION, guard_c
 /**/
 
 
+#ifndef BOOST_GIL_EXTERNAL_LIB
+    //#define BOOST_GIL_EXTERNAL_LIB DynamicLinkAutoLoadAutoInitialize
+    #define BOOST_GIL_EXTERNAL_LIB ( BOOST_LIB_LINK_RUNTIME_AUTO_LOAD, BOOST_LIB_LOADING_RELOADABLE, BOOST_LIB_INIT_AUTO )
+#endif // BOOST_GIL_EXTERNAL_LIB
+
+
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
