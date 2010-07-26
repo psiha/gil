@@ -543,8 +543,8 @@ private: // Private formatted_image_base interface.
                     unsigned int const this_tile_width_bytes( last_row_tile ? setup.last_row_tile_width_bytes : setup.tile_width_bytes );
 
                     result.accumulate_equal( ::TIFFReadEncodedTile( p_tiff_, current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
-                    unsigned char const * p_tile_buffer_location( setup.p_tile_buffer.get() + ( setup.rows_to_skip * this_tile_width_bytes )           );
-                    unsigned char       * p_target_local        ( p_target                                                                             );
+                    unsigned char const * p_tile_buffer_location( setup.p_tile_buffer.get() + ( setup.rows_to_skip * this_tile_width_bytes ) );
+                    unsigned char       * p_target_local        ( p_target                                                                   );
                     for ( unsigned int row( setup.rows_to_skip ); row < setup.rows_to_read_per_tile; ++row )
                     {
                         std::memcpy( p_target_local, p_tile_buffer_location, this_tile_width_bytes );
@@ -561,7 +561,7 @@ private: // Private formatted_image_base interface.
                         if ( next_row_is_last_row )
                             setup.rows_to_read_per_tile = setup.end_rows_to_read;
                     }
-                    BOOST_ASSERT( p_tile_buffer_location == ( setup.p_tile_buffer.get() + this_tile_size_bytes ) || ( setup.rows_to_read_per_tile != setup.tile_height ) );
+                    //BOOST_ASSERT( p_tile_buffer_location == ( setup.p_tile_buffer.get() + this_tile_size_bytes ) || ( setup.rows_to_read_per_tile != setup.tile_height ) );
                     BOOST_ASSERT( p_target <= view_data.plane_buffers_[ plane ] + ( view_data.stride_ * view_data.dimensions_.y ) );
                 }
                 BOOST_ASSERT( p_target == view_data.plane_buffers_[ plane ] + ( view_data.stride_ * view_data.dimensions_.y ) );
