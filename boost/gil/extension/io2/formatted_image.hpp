@@ -479,6 +479,9 @@ private:
 
         format_t /*const*/ format_;
         unsigned int       image_id_;
+
+    private:
+        void operator=( image_id_finder const & );
     };
 
 private:
