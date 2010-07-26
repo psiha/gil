@@ -68,9 +68,6 @@ typedef mpl::vector3
 
 
 
-struct libjpeg_guard {};
-
-
 class libjpeg_roi
 {
 public:
@@ -98,12 +95,22 @@ private:
 };
 
 
+struct libjpeg_object_wrapper_t
+{
+    union aux_union
+    {
+        jpeg_compress_struct     compressor_;
+        jpeg_decompress_struct decompressor_;
+    } libjpeg_object;
+};
+
+
 #if defined(BOOST_MSVC)
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
 
-class libjpeg_base : private libjpeg_guard
+class libjpeg_base : private libjpeg_object_wrapper_t
 {
 protected:
     struct for_decompressor {};
@@ -141,40 +148,69 @@ protected:
 
     libjpeg_base & mutable_this() const { return const_cast<libjpeg_base &>( *this ); }
 
+    static libjpeg_base & base( jpeg_common_struct * const p_libjpeg_object )
+    {
+        BOOST_ASSERT( p_libjpeg_object );
+        return *static_cast<libjpeg_base *>( gil_reinterpret_cast<libjpeg_object_wrapper_t *>( p_libjpeg_object ) );
+    }
+
     __declspec( noreturn )
     static void throw_jpeg_error() throw(...)
     {
         io_error( "jpeg error" );
     }
 
+    __declspec( noreturn )
+    static inline void libX_fatal_error_handler( j_common_ptr const p_cinfo )
+    {
+        longjmp( base( p_cinfo ).error_handler_target(), 1 );
+    }
+
 private:
     void initialize_error_handler()
     {
-        common().err         = jpeg_std_error( &jerr_ );
-        common().client_data = this;
-        jerr_.error_exit = &libjpeg_base::libX_fatal_error_handler;
+        #ifndef NDEBUG
+            jpeg_std_error( &jerr_ );
+        #else
+            std::memset( &jerr_, 0, sizeof( jerr_ ) );
+            jerr_.emit_message    = &emit_message   ;
+            jerr_.output_message  = &output_message ;
+            jerr_.format_message  = &format_message ;
+            jerr_.reset_error_mgr = &reset_error_mgr;
+        #endif // NDEBUG
+        jerr_.error_exit = &error_exit;
+
+        common().err = &jerr_;
     }
 
-    static inline void libX_fatal_error_handler( j_common_ptr const cinfo )
+    static void __cdecl error_exit( j_common_ptr const p_cinfo )
     {
-        libjpeg_base * const p_me( gil_reinterpret_cast<libjpeg_base *>( cinfo->client_data ) );
-        BOOST_ASSERT( p_me );
-        longjmp( p_me->longjmp_target_, 1 );
+        #ifndef NDEBUG
+            p_cinfo->err->output_message( p_cinfo );
+        #endif
+
+        libX_fatal_error_handler( p_cinfo );
+    }
+
+    static void __cdecl output_message( j_common_ptr /*p_cinfo*/ ) {}
+    static void __cdecl emit_message  ( j_common_ptr /*p_cinfo*/, int /*msg_level*/ ) {}
+    static void __cdecl format_message( j_common_ptr /*p_cinfo*/, char * /*buffer*/ ) {}
+
+    static void __cdecl reset_error_mgr( j_common_ptr const p_cinfo )
+    {
+        BOOST_ASSERT( p_cinfo->err->num_warnings == 0 );
+        BOOST_ASSERT( p_cinfo->err->msg_code     == 0 );
+        ignore_unused_variable_warning( p_cinfo );
     }
 
 private:
-    union libjpeg_object_t
-    {
-        jpeg_compress_struct     compressor_;
-        jpeg_decompress_struct decompressor_;
-    } libjpeg_object;
-
-    jpeg_error_mgr         jerr_ ;
-
     //#ifndef BOOST_MSVC
     mutable jmp_buf longjmp_target_;
     //#endif // BOOST_MSVC
+
+    jpeg_error_mgr jerr_ ;
 };
+
 
 class libjpeg_image;
 
@@ -191,7 +227,7 @@ struct decompression_setup_data_t
 struct view_data_t : decompression_setup_data_t
 {
     template <class View>
-    explicit view_data_t( View const & view, libjpeg_roi::offset_t const offset )
+    /*explicit*/ view_data_t( View const & view, libjpeg_roi::offset_t const offset = 0 )
         :
         decompression_setup_data_t
         (
@@ -201,28 +237,158 @@ struct view_data_t : decompression_setup_data_t
         ),
         height_( view.height()            ),
         width_ ( view.width ()            ),
-        stride_( view.pixels().row_size() )
+        stride_( view.pixels().row_size() ),
+        number_of_channels_( num_channels<View>::value )
     {}
 
     void set_format( J_COLOR_SPACE const format ) { format_ = format; }
 
-    unsigned int    /*const*/ height_;
-    unsigned int    /*const*/ width_ ;
-    unsigned int    /*const*/ stride_;
+    unsigned int /*const*/ height_;
+    unsigned int /*const*/ width_ ;
+    unsigned int /*const*/ stride_;
+    unsigned int           number_of_channels_;
 };
+
+
+class libjpeg_writer : public libjpeg_base
+{
+public:
+    explicit libjpeg_writer( char const * const p_target_file_name )
+        :
+        libjpeg_base( for_compressor() )
+    {
+        setup_destination( p_target_file_name );
+    }
+
+
+    ~libjpeg_writer()
+    {
+        jpeg_finish_compress( &compressor() );
+    }
+
+    jpeg_compress_struct       & lib_object()       { return compressor(); }
+    jpeg_compress_struct const & lib_object() const { return const_cast<libjpeg_writer &>( *this ).lib_object(); }
+
+    static void write( view_data_t const & view, char const * const p_target_file_name )
+    {
+        BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
+
+        libjpeg_writer writer( p_target_file_name );
+        
+        writer.compressor().image_width  = static_cast<JDIMENSION>( view.width_  );
+        writer.compressor().image_height = static_cast<JDIMENSION>( view.height_ );
+        writer.compressor().input_components = view.number_of_channels_;
+        writer.compressor().in_color_space   = view.format_;
+        jpeg_set_defaults  ( &writer.compressor()             );
+        //jpeg_set_quality   ( &writer.compressor(), 100, false );
+        jpeg_start_compress( &writer.compressor(),      false );
+
+        JSAMPLE *       p_row( view.buffer_ );
+        JSAMPLE * const p_end( memunit_advanced( view.buffer_, view.height_ * view.stride_ ) );
+        while ( p_row < p_end )
+        {
+            io_error_if( jpeg_write_scanlines( &writer.compressor(), &p_row, 1 ) != 1 );
+            memunit_advance( p_row, view.stride_ );
+        }
+    }
+
+private:
+    static libjpeg_writer & writer(  j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( static_cast<libjpeg_writer &>( base( gil_reinterpret_cast<j_common_ptr>( p_cinfo ) ) ) );
+        BOOST_ASSERT( p_cinfo->dest == &writer.destination_manager_ );
+        return writer;
+    }
+
+    void setup_destination()
+    {
+        destination_manager_.next_output_byte = 0;
+        destination_manager_.free_in_buffer   = 0;
+
+        BOOST_ASSERT( compressor().dest == NULL );
+        compressor().dest = &destination_manager_;
+    }
+
+    void setup_destination( FILE & file )
+    {
+        setup_destination();
+
+        compressor().client_data = &file;
+
+        destination_manager_.init_destination    = &init_FILE_destination;
+        destination_manager_.empty_output_buffer = &empty_FILE_buffer    ;
+        destination_manager_.term_destination    = &term_FILE_destination;
+    }
+
+    void setup_destination( char const * const p_file_name )
+    {
+        FILE * const p_file( /*std*/::fopen( p_file_name, "wb" ) );
+        if ( !p_file )
+            throw_jpeg_error();
+        setup_destination( *p_file );
+        destination_manager_.term_destination = &term_and_close_FILE_destination;
+    }
+
+    static void __cdecl init_FILE_destination( j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( writer( p_cinfo ) );
+
+        writer.destination_manager_.next_output_byte = writer.write_buffer_.begin();
+        writer.destination_manager_.free_in_buffer   = writer.write_buffer_.size ();
+    }
+
+    void write_FILE_bytes( std::size_t const number_of_bytes )
+    {
+        if
+        (
+            /*std*/::fwrite
+            (
+                write_buffer_.begin(),
+                number_of_bytes,
+                1,
+                static_cast<FILE *>( compressor().client_data )
+            ) != 1
+        )
+            libX_fatal_error_handler( &common() );
+    }
+    
+    static boolean __cdecl empty_FILE_buffer( j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( writer( p_cinfo ) );
+        writer.write_FILE_bytes( writer.write_buffer_.size() );
+        init_FILE_destination( p_cinfo );
+        return true;
+    }
+
+    static void __cdecl term_FILE_destination( j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( writer( p_cinfo ) );
+
+        std::size_t const remaining_bytes( writer.write_buffer_.size() - writer.destination_manager_.free_in_buffer );
+
+        writer.write_FILE_bytes( remaining_bytes );
+    }
+
+    static void __cdecl term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
+    {
+        term_FILE_destination( p_cinfo );
+        BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( writer( p_cinfo ).compressor().client_data ) ) == 0 );
+    }
+
+private:
+    jpeg_destination_mgr       destination_manager_;
+    array<unsigned char, 4096> write_buffer_       ;
+};
+
 
 template <>
 struct formatted_image_traits<libjpeg_image>
 {
-    typedef J_COLOR_SPACE format_t;
-
+    typedef J_COLOR_SPACE                   format_t;
     typedef libjpeg_supported_pixel_formats supported_pixel_formats_t;
-
-    typedef libjpeg_roi roi_t;
-
-    typedef view_libjpeg_format view_to_native_format;
-
-    typedef view_data_t view_data_t;
+    typedef libjpeg_roi                     roi_t;
+    typedef view_libjpeg_format             view_to_native_format;
+    typedef view_data_t                     view_data_t;
 
     template <class View>
     struct is_supported : mpl::bool_<view_libjpeg_format::apply<View>::value != JCS_UNKNOWN> {};
@@ -237,6 +403,9 @@ class libjpeg_image
     public  libjpeg_base,
     public  detail::formatted_image<libjpeg_image>
 {
+public:
+    struct guard {};
+
 public:
     format_t format() const { return decompressor().jpeg_color_space; }
 
@@ -340,7 +509,6 @@ public:
 
     jpeg_decompress_struct       & lib_object()       { return decompressor(); }
     jpeg_decompress_struct const & lib_object() const { return const_cast<libjpeg_image &>( *this ).lib_object(); }
-
 
 private: // Private formatted_image_base interface.
     friend base_t;
@@ -449,9 +617,9 @@ private:
         unsigned int       rows_to_skip( view_data.offset_           );
         if
         (
-            ( state                          != DSTATE_SCANNING   ) ||
-            ( decompressor().out_color_space != view_data.format_ ) ||
-            ( decompressor().output_scanline  > view_data.offset_ )
+            ( state                          !=                          DSTATE_SCANNING   )   ||
+            ( decompressor().out_color_space !=                          view_data.format_ )   ||
+            ( decompressor().output_scanline  > static_cast<JDIMENSION>( view_data.offset_ ) )
         )
         {
             BOOST_ASSERT
@@ -475,7 +643,7 @@ private:
 
         if ( rows_to_skip )
             skip_rows( rows_to_skip, view_data.buffer_ );
-        BOOST_ASSERT( decompressor().output_scanline == view_data.offset_ );
+        BOOST_ASSERT( decompressor().output_scanline == static_cast<JDIMENSION>( view_data.offset_ ) );
     }
 
     void skip_rows( unsigned int const number_of_rows_to_skip, JSAMPROW /*const*/ dummy_scanline_buffer ) const
@@ -556,28 +724,28 @@ private:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class libjpeg_view_base : noncopyable
-{
-public:
-    ~libjpeg_view_base()
-    {
-    }
-
-protected:
-    libjpeg_view_base( libjpeg_image & bitmap, unsigned int const lock_mode, libjpeg_image::roi const * const p_roi = 0 )
-    {
-    }
-
-    template <typename Pixel>
-    typename type_from_x_iterator<Pixel *>::view_t
-    get_typed_view()
-    {
-        //todo assert correct type...
-        interleaved_view<Pixel *>( bitmapData_.Width, bitmapData_.Height, bitmapData_.Scan0, bitmapData_.Stride );
-    }
-
-private:
-};
+//class libjpeg_view_base : noncopyable
+//{
+//public:
+//    ~libjpeg_view_base()
+//    {
+//    }
+//
+//protected:
+//    libjpeg_view_base( libjpeg_image & bitmap, unsigned int const lock_mode, libjpeg_image::roi const * const p_roi = 0 )
+//    {
+//    }
+//
+//    template <typename Pixel>
+//    typename type_from_x_iterator<Pixel *>::view_t
+//    get_typed_view()
+//    {
+//        //todo assert correct type...
+//        interleaved_view<Pixel *>( bitmapData_.Width, bitmapData_.Height, bitmapData_.Scan0, bitmapData_.Stride );
+//    }
+//
+//private:
+//};
 
 
 //...zzz...incomplete...
@@ -587,19 +755,19 @@ private:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename Pixel>
-class libjpeg_view
-    :
-    private libjpeg_view_base,
-    public  type_from_x_iterator<Pixel *>::view_t
-{
-public:
-    libjpeg_view( libjpeg_image & image, libjpeg_image::roi const * const p_roi = 0 )
-        :
-        libjpeg_view_base( image, ImageLockModeRead | ( is_const<Pixel>::value * ImageLockModeWrite ), p_roi ),
-        type_from_x_iterator<Pixel *>::view_t( get_typed_view<Pixel>() )
-    {}
-};
+//template <typename Pixel>
+//class libjpeg_view
+//    :
+//    private libjpeg_view_base,
+//    public  type_from_x_iterator<Pixel *>::view_t
+//{
+//public:
+//    libjpeg_view( libjpeg_image & image, libjpeg_image::roi const * const p_roi = 0 )
+//        :
+//        libjpeg_view_base( image, ImageLockModeRead | ( is_const<Pixel>::value * ImageLockModeWrite ), p_roi ),
+//        type_from_x_iterator<Pixel *>::view_t( get_typed_view<Pixel>() )
+//    {}
+//};
 
 
 //------------------------------------------------------------------------------
