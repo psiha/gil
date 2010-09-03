@@ -23,6 +23,9 @@
 
 #define ATLENSURE ATLVERIFY
 #include "atlcomcli.h"
+#if defined( _STDINT ) && !defined( _INTSAFE_H_INCLUDED_ )
+    #define _INTSAFE_H_INCLUDED_
+#endif
 #include "wincodec.h"
 //------------------------------------------------------------------------------
 namespace boost
