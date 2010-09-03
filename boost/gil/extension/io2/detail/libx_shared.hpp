@@ -59,6 +59,24 @@ private:
     value_type const   end_row_;
 };
 
+
+class c_file_guard
+{
+public:
+    c_file_guard( char const * const file_name )
+        :
+        p_file_( /*std*/::fopen( file_name, "rb" ) )
+    {
+        io_error_if( !p_file_, "File open failure" );
+    }
+    ~c_file_guard() { /*std*/::fclose( p_file_ ); }
+
+    FILE & get() const { return *p_file_; }
+
+private:
+    FILE * const p_file_;
+};
+
 //------------------------------------------------------------------------------
 } // namespace detail
 //------------------------------------------------------------------------------
