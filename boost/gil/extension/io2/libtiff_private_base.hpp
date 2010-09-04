@@ -430,7 +430,7 @@ private:
 
 private: // Private formatted_image_base interface.
     friend base_t;
-    struct tile_setup_t : noncopyable
+    struct tile_setup_t : boost::noncopyable
     {
         tile_setup_t( libtiff_image const & source, point2<std::ptrdiff_t> const & dimensions, offset_t const offset, bool const nptcc )
             :
