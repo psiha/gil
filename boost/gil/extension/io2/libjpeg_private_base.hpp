@@ -17,11 +17,10 @@
 #ifndef libjpeg_private_base_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 #define libjpeg_private_base_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 //------------------------------------------------------------------------------
-#include "../../gil_all.hpp"
 #include "formatted_image.hpp"
 #include "io_error.hpp"
+#include "detail/libx_shared.hpp"
 
-#include <boost/foreach.hpp>
 #include <boost/smart_ptr/scoped_ptr.hpp>
 
 #define JPEG_INTERNALS
@@ -67,32 +66,7 @@ typedef mpl::vector3
 > libjpeg_supported_pixel_formats;
 
 
-
-class libjpeg_roi
-{
-public:
-    typedef std::ptrdiff_t     value_type;
-    typedef point2<value_type> point_t   ;
-
-    typedef value_type         offset_t  ;
-
-public:
-    libjpeg_roi( value_type const start_row, value_type const end_row )
-        :
-        start_row_( start_row ),
-        end_row_  ( end_row   )
-    {}
-
-    value_type start_row() const { return start_row_; }
-    value_type end_row  () const { return end_row_  ; }
-
-private:
-    void operator=( libjpeg_roi const & );
-
-private:
-    value_type const start_row_;
-    value_type const   end_row_;
-};
+typedef generic_vertical_roi libjpeg_roi;
 
 
 struct libjpeg_object_wrapper_t
@@ -105,7 +79,7 @@ struct libjpeg_object_wrapper_t
 };
 
 
-#if defined(BOOST_MSVC)
+#if defined( BOOST_MSVC )
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
