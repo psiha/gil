@@ -19,6 +19,8 @@
 #ifndef formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 #define formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 //------------------------------------------------------------------------------
+/// \todo Investigate whether gil_all.hpp is indeed necessary.
+///                                           (26.07.2010.) (Domagoj Saric)
 #include "../../gil_all.hpp"
 #include "io_error.hpp"
 
@@ -33,6 +35,7 @@
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/for_each.hpp>
 #include <boost/mpl/integral_c.hpp>
+#include <boost/mpl/map.hpp>
 #ifdef _DEBUG
 #include <boost/numeric/conversion/converter.hpp>
 #include <boost/numeric/conversion/converter_policies.hpp>
@@ -244,7 +247,7 @@ struct get_original_view_t<offset_view_t<View, Offset> > { typedef View type; };
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class formatted_image_base
+class formatted_image_base : noncopyable
 {
 public:
     typedef point2<std::ptrdiff_t> dimensions_t;
@@ -406,6 +409,10 @@ public:
     typedef typename dynamic_image_t::const_view_t const_view_t;
     typedef typename dynamic_image_t::      view_t       view_t;
 
+    template <typename Source>
+    struct reader_for
+        : public mpl::at<typename formatted_image_traits<Impl>::readers, Source> {};
+
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
 
 protected:
@@ -529,7 +536,7 @@ protected:
     template <typename View>
     bool can_do_inplace_transform( typename formatted_image_traits<Impl>::format_t const my_format ) const
     {
-        return ( Impl::format_size( my_format ) == static_cast<std::size_t>( memunit_step( get_original_view_t<View>::type::x_iterator() ) ) );
+        return ( impl().format_size( my_format ) == static_cast<std::size_t>( memunit_step( get_original_view_t<View>::type::x_iterator() ) ) );
     }
 
     // A generic implementation...impl classes are encouraged to provide more
@@ -803,12 +810,12 @@ private:
     template <typename View, typename CC>
     void convert_to_prepared_view_worker( View const & view, CC const & converter, mpl::true_ /*can use raw*/ ) const
     {
-        format_t     const my_format              ( impl().closest_gil_supported_format() );
-        unsigned int const current_image_format_id( impl().image_format_id( my_format )   );
-        if ( can_do_inplace_transform<View>( my_format ) )
+        format_t     const current_format         ( impl().closest_gil_supported_format()    );
+        unsigned int const current_image_format_id( impl().image_format_id( current_format ) );
+        if ( can_do_inplace_transform<View>( current_format ) )
         {
             typename formatted_image_traits<Impl>::view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
-            view_data.set_format( my_format );
+            view_data.set_format( current_format );
             impl().raw_copy_to_prepared_view( view_data );
             in_place_transform( current_image_format_id, original_view( view ), converter );
         }
