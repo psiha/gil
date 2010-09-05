@@ -22,8 +22,8 @@
 /// \todo Investigate whether gil_all.hpp is indeed necessary.
 ///                                           (26.07.2010.) (Domagoj Saric)
 #include "../../gil_all.hpp"
-#include "io_error.hpp"
 
+#include "detail/io_error.hpp"
 #include "detail/switch.hpp"
 
 #include <boost/gil/extension/dynamic_image/any_image.hpp>

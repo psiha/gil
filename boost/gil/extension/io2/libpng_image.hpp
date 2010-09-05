@@ -18,7 +18,7 @@
 #define libpng_image_hpp__9E0C99E6_EAE8_4D71_844B_93518FFCB5CE
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
-#include "io_error.hpp"
+#include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 
 #include "png.h"
@@ -262,7 +262,7 @@ private: // Private formatted_image_base interface.
 
         unsigned int number_of_passes( ::png_set_interlace_handling( &png_object() ) );
         __assume( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
-        BOOST_ASSERT( ( number_of_passes == 1 ) && !"Missing interlaced support for the generic conversion case." );
+        BOOST_ASSERT( ( number_of_passes == 1 ) && "Missing interlaced support for the generic conversion case." );
         ignore_unused_variable_warning( number_of_passes );
 
         skip_rows( detail::get_offset<offset_t>( view ) );
@@ -368,7 +368,7 @@ private:
     __declspec( noreturn )
     static void throw_libpng_error()
     {
-        io_error( "LibPNG failure" );
+        detail::io_error( "LibPNG failure" );
     }
 
     __declspec( noreturn )

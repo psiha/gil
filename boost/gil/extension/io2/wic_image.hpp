@@ -20,10 +20,10 @@
 #define wic_image_hpp__78D710F7_11C8_4023_985A_22B180C9A476
 //------------------------------------------------------------------------------
 #include "../../gil_all.hpp"
+#include "detail/io_error.hpp"
 #include "detail/wic_extern_lib_guard.hpp"
 #include "detail/windows_shared.hpp"
 #include "detail/windows_shared_istreams.hpp"
-#include "io_error.hpp"
 
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>

@@ -20,8 +20,10 @@
 #define libx_shared_hpp__ABC7759A_4313_4BFF_B64F_D72BBF2355E8
 //------------------------------------------------------------------------------
 #include "../../../utilities.hpp"
+#include "io_error.hpp"
 
 #include "crtdefs.h"
+#include <cstdio>
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -32,6 +34,13 @@ namespace gil
 namespace detail
 {
 //------------------------------------------------------------------------------
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class generic_vertical_roi
+///
+////////////////////////////////////////////////////////////////////////////////
 
 class generic_vertical_roi
 {
@@ -60,6 +69,13 @@ private:
 };
 
 
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class c_file_guard
+///
+////////////////////////////////////////////////////////////////////////////////
+
 class c_file_guard
 {
 public:
@@ -76,6 +92,33 @@ public:
 private:
     FILE * const p_file_;
 };
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class cumulative_result
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class cumulative_result
+{
+public:
+    cumulative_result() : result_( true ) {}
+
+    void accumulate( bool const new_result ) { result_ &= new_result; }
+    template <typename T1, typename T2>
+    void accumulate_equal( T1 const new_result, T2 const desired_result ) { accumulate( new_result == desired_result ); }
+    template <typename T>
+    void accumulate_different( T const new_result, T const undesired_result ) { accumulate( new_result != undesired_result ); }
+
+    void throw_if_error( char const * const description ) const { io_error_if_not( result_, description ); }
+
+    bool & get() { return result_; }
+
+private:
+    bool result_;
+};
+
 
 //------------------------------------------------------------------------------
 } // namespace detail

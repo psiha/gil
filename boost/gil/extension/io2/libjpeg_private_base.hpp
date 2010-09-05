@@ -18,7 +18,7 @@
 #define libjpeg_private_base_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
-#include "io_error.hpp"
+#include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 
 #include <boost/smart_ptr/scoped_ptr.hpp>

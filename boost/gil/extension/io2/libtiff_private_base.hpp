@@ -18,12 +18,12 @@
 #define libtiff_private_base_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
-#include "io_error.hpp"
 
+#include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 
 #if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
-    ...error...libtiff support requires mpl vectors of size 35...
+    ...error...libtiff support requires mpl vectors of size 35 or greater...
 #endif
 
 #include <boost/array.hpp>
@@ -405,7 +405,7 @@ private:
             }
         }
 
-        io_error_if( !cumulative_result || unsupported_format || ( orientation != ORIENTATION_TOPLEFT ), "TeeF" );
+        detail::io_error_if( !cumulative_result || unsupported_format || ( orientation != ORIENTATION_TOPLEFT ), "TeeF" );
 
         format_.number = LIBTIFF_FORMAT( samples_per_pixel, bits_per_sample, ( sample_format == SAMPLEFORMAT_VOID ) ? SAMPLEFORMAT_UINT : sample_format, planar_configuration, photometric, ink_set );
     }
@@ -414,7 +414,7 @@ private:
 private:
     void construction_check() const
     {
-        io_error_if( !p_tiff_, "Failed to open TIFF input file" );
+        detail::io_error_if_not( p_tiff_, "Failed to open TIFF input file" );
     }
 
     void constructor_tail()
@@ -505,23 +505,10 @@ private: // Private formatted_image_base interface.
         unsigned int starting_strip;
     };
 
-    class cumulative_result
+    class cumulative_result : public detail::cumulative_result
     {
     public:
-        cumulative_result() : result_( true ) {}
-
-        void accumulate( bool const new_result ) { result_ &= new_result; }
-        template <typename T1, typename T2>
-        void accumulate_equal( T1 const new_result, T2 const desired_result ) { accumulate( new_result == desired_result ); }
-        template <typename T>
-        void accumulate_different( T const new_result, T const undesired_result ) { accumulate( new_result != undesired_result ); }
-
-        void throw_if_error() const { io_error_if( result_ != true, "Error reading TIFF file" ); }
-
-        bool & get() { return result_; }
-
-    private:
-        bool result_;
+        void throw_if_error() const { detail::cumulative_result::throw_if_error( "Error reading TIFF file" ); }
     };
 
     void raw_copy_to_prepared_view( tiff_view_data_t const view_data ) const
