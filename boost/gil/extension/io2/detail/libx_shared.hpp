@@ -22,6 +22,8 @@
 #include "../../../utilities.hpp"
 #include "io_error.hpp"
 
+#include "boost/noncopyable.hpp"
+
 #include "crtdefs.h"
 #include <cstdio>
 //------------------------------------------------------------------------------
@@ -76,7 +78,7 @@ private:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class c_file_guard
+class c_file_guard : noncopyable
 {
 public:
     c_file_guard( char const * const file_name )
