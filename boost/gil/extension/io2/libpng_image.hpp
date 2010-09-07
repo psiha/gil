@@ -20,10 +20,13 @@
 #include "formatted_image.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
+#include "detail/shared.hpp"
 
 #include "png.h"
 
-#include <csetjmp>
+#ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #include <csetjmp>
+#endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 #include <cstdlib>
 //------------------------------------------------------------------------------
 namespace boost
@@ -70,35 +73,7 @@ typedef mpl::vector6
 > libpng_supported_pixel_formats;
 
 
-
 typedef generic_vertical_roi libpng_roi;
-
-//...zzz...
-//class scoped_read_png_ptr
-//{
-//public:
-//    scoped_read_png_ptr()
-//        :
-//        p_png_( ::png_create_read_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) )
-//    {}
-//    ~scoped_read_png_ptr()
-//    {
-//        ::png_destroy_read_struct( p_png_, NULL, NULL );
-//    }
-//
-//private:
-//    png_structp const p_png_;
-//};
-//
-//class scoped_png_info_ptr
-//{
-//public:
-//    scoped_png_ptr( png_structp const p_png_ )
-//private:
-//    ;
-//    png_infop   const p_info_;
-//};
-
 
 
 struct libpng_view_data_t
@@ -152,6 +127,53 @@ struct formatted_image_traits<libpng_image>
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
 };
 
+
+
+inline void throw_libpng_error()
+{
+    boost::gil::detail::io_error( "LibPNG failure" );
+}
+
+
+inline void PNGAPI png_error_function( png_structp const png_ptr, png_const_charp const /*error_message*/ )
+{
+    #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        throw_libpng_error();
+        boost::ignore_unused_variable_warning( png_ptr );
+    #else
+        longjmp( png_ptr->jmpbuf, 1 );
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+}
+
+
+inline void PNGAPI png_warning_function( png_structp, png_const_charp )
+{
+}
+
+//...zzz...this will blow-up at link-time when included in multiple .cpps unless it gets moved into a separate module...
+#ifdef PNG_NO_ERROR_TEXT
+    extern "C" void PNGAPI png_error( png_structp const png_ptr, png_const_charp const error_message )
+    {
+        png_error_function( png_ptr, error_message );
+    }
+
+    extern "C" void PNGAPI png_chunk_error( png_structp const png_ptr, png_const_charp const error_message )
+    {
+        png_error( png_ptr, error_message );
+    }
+#endif // PNG_NO_ERROR_TEXT
+
+#ifdef PNG_NO_WARNINGS
+    extern "C" void PNGAPI png_warning( png_structp const png_ptr, png_const_charp const error_message )
+    {
+        png_warning_function( png_ptr, error_message );
+    }
+
+    extern "C" void PNGAPI png_chunk_warning( png_structp const png_ptr, png_const_charp const error_message )
+    {
+        png_warning_function( png_ptr, error_message );
+    }
+#endif // PNG_NO_WARNINGS
 //------------------------------------------------------------------------------
 } // namespace detail
 
@@ -213,18 +235,52 @@ public:
         return number_of_channels() * bit_depth() / 8;
     }
 
+private:
+    static void PNGAPI png_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
+    {
+        BOOST_ASSERT( png_ptr );
+
+        png_size_t const read_size
+        (
+            static_cast<png_size_t>( std::fread( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
+        );
+
+        if ( read_size != length )
+            detail::png_error_function( png_ptr, "Read Error" );
+    }
+
+    static void PNGAPI png_write_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
+    {
+        BOOST_ASSERT( png_ptr );
+
+        png_size_t const written_size
+        (
+            static_cast<png_size_t>( std::fwrite( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
+        );
+
+        if ( written_size != length )
+            detail::png_error_function( png_ptr, "Write Error" );
+    }
+
+    //static void png_flush_data( png_structp const png_ptr);
+
 public: /// \ingroup Construction
     explicit libpng_image( FILE & file )
         :
-        p_png_ ( ::png_create_read_struct( PNG_LIBPNG_VER_STRING, NULL, NULL, NULL ) ),
-        p_info_( ::png_create_info_struct( p_png_                                  ) )
+        p_png_ ( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) ),
+        p_info_( ::png_create_info_struct  ( p_png_                                                                                                    ) )
     {
         /// \todo Replace this manual logic with proper RAII guards.
         ///                                   (03.09.2010.) (Domagoj Saric)
         if ( !p_png_ || !p_info_ )
             cleanup_and_throw_libpng_error();
 
-        ::png_init_io( &png_object(), &file );
+        #ifdef PNG_NO_STDIO
+            ::png_set_read_fn( &png_object(), &file, &png_read_data );
+        #else
+            ::png_init_io( &png_object(), &file );
+        #endif
+        //..zzz...png_set_write_fn(png_structp write_ptr, voidp write_io_ptr, png_rw_ptr write_data_fn, png_flush_ptr output_flush_fn);
 
         init();
     }
@@ -252,13 +308,15 @@ private: // Private formatted_image_base interface.
     friend class base_t;
 
     template <class MyView, class TargetView, class Converter>
-    void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
+    void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const throw(...)
     {
         std::size_t          const row_length  ( ::png_get_rowbytes( &png_object(), &info_object() ) );
-        scoped_ptr<png_byte> const p_row_buffer( new png_byte[ row_length ]     );
+        scoped_ptr<png_byte> const p_row_buffer( new png_byte[ row_length ]                          );
 
-        if ( setjmp( error_handler_target() ) )
-            throw_libpng_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                detail::throw_libpng_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         unsigned int number_of_passes( ::png_set_interlace_handling( &png_object() ) );
         __assume( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
@@ -273,7 +331,7 @@ private: // Private formatted_image_base interface.
         unsigned int const rows_to_read( detail::original_view( view ).dimensions().y );
         for ( unsigned int row_index( 0 ); row_index < rows_to_read; ++row_index )
         {
-            ::png_read_row( &png_object(), p_row, NULL );
+            read_row( p_row );
 
             typedef typename MyView::value_type pixel_t;
 
@@ -340,10 +398,12 @@ private: // Private formatted_image_base interface.
         raw_copy_to_prepared_view( view_data );
     }
 
-    void raw_copy_to_prepared_view( detail::libpng_view_data_t const view_data ) const
+    void raw_copy_to_prepared_view( detail::libpng_view_data_t const view_data ) const throw(...)
     {
-        if ( setjmp( error_handler_target() ) )
-            throw_libpng_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                detail::throw_libpng_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         unsigned int number_of_passes( ::png_set_interlace_handling( &png_object() ) );
         __assume( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
@@ -356,43 +416,52 @@ private: // Private formatted_image_base interface.
             png_byte const * const p_end( p_row + ( view_data.height_ * view_data.stride_ ) );
             while ( p_row < p_end )
             {
-                ::png_read_row( &png_object(), p_row, NULL );
+                read_row( p_row );
                 memunit_advance( p_row, view_data.stride_ );
             }
         }
     }
 
 private:
-    jmp_buf & error_handler_target() const { return png_object().jmpbuf; }
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        jmp_buf & error_handler_target() const { return png_object().jmpbuf; }
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
-    __declspec( noreturn )
-    static void throw_libpng_error()
-    {
-        detail::io_error( "LibPNG failure" );
-    }
-
-    __declspec( noreturn )
     void cleanup_and_throw_libpng_error()
     {
         destroy_read_struct();
-        throw_libpng_error ();
+        detail::throw_libpng_error();
     }
 
-    void init()
+    void init() throw(...)
     {
-        if ( setjmp( error_handler_target() ) )
-            cleanup_and_throw_libpng_error();
+        #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            try
+            {
+        #else
+            if ( setjmp( error_handler_target() ) )
+                cleanup_and_throw_libpng_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
-        ::png_read_info( &png_object(), &info_object() );
-        if ( little_endian() )
-            ::png_set_swap( &png_object() );
+            ::png_read_info( &png_object(), &info_object() );
+            if ( little_endian() )
+                ::png_set_swap( &png_object() );
+
+        #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            }
+            catch(...)
+            {
+                destroy_read_struct();
+                throw;
+            }
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
     }
 
     void skip_rows( unsigned int number_of_rows_to_skip ) const
     {
         while ( number_of_rows_to_skip-- )
         {
-            ::png_read_row( &png_object(), NULL, NULL );
+            read_row( NULL );
         }
     }
 
@@ -400,6 +469,14 @@ private:
     std::size_t  bit_depth         () const { return ::png_get_bit_depth( &png_object(), &info_object() ); }
 
     void destroy_read_struct() { ::png_destroy_read_struct( &p_png_, &p_info_, NULL ); }
+
+    void read_row( png_byte * const p_row ) const
+    #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        throw(...)
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    {
+        ::png_read_row( &png_object(), p_row, NULL );
+    }
 
     png_struct & png_object() const
     {
