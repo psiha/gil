@@ -20,6 +20,7 @@
 #include "formatted_image.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
+#include "detail/shared.hpp"
 
 #include <boost/smart_ptr/scoped_ptr.hpp>
 
@@ -27,7 +28,9 @@
 #include "jpeglib.h"
 #undef JPEG_INTERNALS
 
-#include <csetjmp>
+#ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #include <csetjmp>
+#endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 #include <cstdlib>
 //------------------------------------------------------------------------------
 namespace boost
@@ -94,24 +97,26 @@ protected:
     libjpeg_base( for_decompressor ) throw(...)
     {
         initialize_error_handler();
-        if ( setjmp( error_handler_target() ) )
-            throw_jpeg_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         jpeg_create_decompress( &decompressor() );
     }
 
     libjpeg_base( for_compressor ) throw(...)
     {
         initialize_error_handler();
-        if ( setjmp( error_handler_target() ) )
-            throw_jpeg_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         jpeg_create_compress( &compressor() );
     }
 
     ~libjpeg_base() { jpeg_destroy( &common() ); }
 
     void abort() const { jpeg_abort( &mutable_this().common() ); }
-
-    jmp_buf & error_handler_target() const { return longjmp_target_; }
 
     jpeg_common_struct           & common      ()       { return *gil_reinterpret_cast<j_common_ptr>( &libjpeg_object.compressor_ ); }
     jpeg_common_struct     const & common      () const { return const_cast<libjpeg_base &>( *this ).common      (); }
@@ -128,16 +133,23 @@ protected:
         return *static_cast<libjpeg_base *>( gil_reinterpret_cast<libjpeg_object_wrapper_t *>( p_libjpeg_object ) );
     }
 
-    __declspec( noreturn )
-    static void throw_jpeg_error() throw(...)
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        jmp_buf & error_handler_target() const { return longjmp_target_; }
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+
+    static void fatal_error_handler( j_common_ptr const p_cinfo )
     {
-        io_error( "jpeg error" );
+        #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            throw_jpeg_error();
+            ignore_unused_variable_warning( p_cinfo );
+        #else
+            longjmp( base( p_cinfo ).error_handler_target(), 1 );
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
     }
 
-    __declspec( noreturn )
-    static inline void libX_fatal_error_handler( j_common_ptr const p_cinfo )
+    static void throw_jpeg_error()
     {
-        longjmp( base( p_cinfo ).error_handler_target(), 1 );
+        io_error( "LibJPEG error" );
     }
 
 private:
@@ -163,7 +175,7 @@ private:
             p_cinfo->err->output_message( p_cinfo );
         #endif
 
-        libX_fatal_error_handler( p_cinfo );
+        fatal_error_handler( p_cinfo );
     }
 
     static void __cdecl output_message( j_common_ptr /*p_cinfo*/ ) {}
@@ -178,9 +190,9 @@ private:
     }
 
 private:
-    //#ifndef BOOST_MSVC
-    mutable jmp_buf longjmp_target_;
-    //#endif // BOOST_MSVC
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        mutable jmp_buf longjmp_target_;
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
     jpeg_error_mgr jerr_ ;
 };
@@ -234,7 +246,6 @@ public:
         setup_destination( p_target_file_name );
     }
 
-
     ~libjpeg_writer()
     {
         jpeg_finish_compress( &compressor() );
@@ -248,26 +259,42 @@ public:
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
         libjpeg_writer writer( p_target_file_name );
+
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         
         writer.compressor().image_width  = static_cast<JDIMENSION>( view.width_  );
         writer.compressor().image_height = static_cast<JDIMENSION>( view.height_ );
         writer.compressor().input_components = view.number_of_channels_;
         writer.compressor().in_color_space   = view.format_;
-        jpeg_set_defaults  ( &writer.compressor()             );
-        //jpeg_set_quality   ( &writer.compressor(), 100, false );
-        jpeg_start_compress( &writer.compressor(),      false );
+
+        writer.setup_compression();
 
         JSAMPLE *       p_row( view.buffer_ );
         JSAMPLE * const p_end( memunit_advanced( view.buffer_, view.height_ * view.stride_ ) );
         while ( p_row < p_end )
         {
-            io_error_if( jpeg_write_scanlines( &writer.compressor(), &p_row, 1 ) != 1 );
+            writer.write_row( p_row );
             memunit_advance( p_row, view.stride_ );
         }
     }
 
 private:
-    static libjpeg_writer & writer(  j_compress_ptr const p_cinfo )
+    void setup_compression() BOOST_GIL_CAN_THROW
+    {
+        jpeg_set_defaults  ( &compressor()             );
+        //jpeg_set_quality   ( &compressor(), 100, false );
+        jpeg_start_compress( &compressor(),      false );
+    }
+
+    void write_row( JSAMPLE * p_row ) BOOST_GIL_CAN_THROW
+    {
+        BOOST_VERIFY( jpeg_write_scanlines( &compressor(), &p_row, 1 ) == 1 );
+    }
+
+    static libjpeg_writer & writer( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( static_cast<libjpeg_writer &>( base( gil_reinterpret_cast<j_common_ptr>( p_cinfo ) ) ) );
         BOOST_ASSERT( p_cinfo->dest == &writer.destination_manager_ );
@@ -323,7 +350,7 @@ private:
                 static_cast<FILE *>( compressor().client_data )
             ) != 1
         )
-            libX_fatal_error_handler( &common() );
+            fatal_error_handler( &common() );
     }
     
     static boolean __cdecl empty_FILE_buffer( j_compress_ptr const p_cinfo )
@@ -343,6 +370,7 @@ private:
         writer.write_FILE_bytes( remaining_bytes );
     }
 
+    // Ensure that jpeg_finish_compress() is called so that this gets called...
     static void __cdecl term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
     {
         term_FILE_destination( p_cinfo );
@@ -442,7 +470,8 @@ public:
                 return 1;
 
             default:
-                BOOST_ASSERT( !"Invalid or unknown format specified." ); __assume( false );
+                BOOST_ASSERT( !"Invalid or unknown format specified." );
+                __assume( false );
                 return 0;
         }
     }
@@ -456,24 +485,36 @@ public:
     //    return decompressor().output_components;
     //}
 
-
 public: /// \ingroup Construction
-    explicit libjpeg_image( FILE * const p_file )
+    explicit libjpeg_image( FILE & file )
         :
         libjpeg_base( for_decompressor() )
     {
-        BOOST_ASSERT( p_file );
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
-        if ( setjmp( error_handler_target() ) )
-            throw_jpeg_error();
+        setup_source( file );
 
-        jpeg_stdio_src( &decompressor(), p_file );
-
-        BOOST_VERIFY( jpeg_read_header( &decompressor(), true ) == JPEG_HEADER_OK );
-
-        io_error_if( decompressor().data_precision != 8, "Unsupported image file data precision." );
+        read_header();
     }
 
+    explicit libjpeg_image( char const * const file_name )
+        :
+        libjpeg_base( for_decompressor() )
+    {
+        BOOST_ASSERT( file_name );
+
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+
+        setup_source( file_name );
+
+        read_header();
+    }
 
 public:
     point2<std::ptrdiff_t> dimensions() const
@@ -490,8 +531,10 @@ private: // Private formatted_image_base interface.
     {
         setup_decompression( view_data );
 
-        if ( setjmp( error_handler_target() ) )
-            throw_jpeg_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         JSAMPROW scanlines[ 4 ] =
         {
@@ -508,9 +551,8 @@ private: // Private formatted_image_base interface.
             BOOST_ASSERT( scanlines_to_read <= ( decompressor().output_height - decompressor().output_scanline ) );
             unsigned int const lines_read
             (
-                jpeg_read_scanlines
+                read_scanlines
                 (
-                    &mutable_this().decompressor(),
                     scanlines,
                     (std::min)( _countof( scanlines ), scanlines_to_read )
                 )
@@ -549,21 +591,15 @@ private: // Private formatted_image_base interface.
         BOOST_ASSERT( decompressor().output_width      == decompressor().image_width    );
         BOOST_ASSERT( decompressor().output_components == decompressor().num_components );
         
-        if ( setjmp( error_handler_target() ) )
-            throw_jpeg_error();
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         unsigned int const scanlines_to_read( detail::original_view( view ).dimensions().y );
         for ( unsigned int scanline_index( 0 ); scanline_index < scanlines_to_read; ++scanline_index )
         {
-            BOOST_VERIFY
-            (
-                jpeg_read_scanlines
-                (
-                    &mutable_this().decompressor(),
-                    &scanline,
-                    1
-                ) == 1
-            );
+            read_scanline( scanline );
 
             pixel_t const *                 p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( scanline ) );
             typename TargetView::x_iterator p_target_pixel( view.row_begin( scanline_index )                    );
@@ -602,8 +638,10 @@ private:
                 ( state == DSTATE_SCANNING )
             );
 
-            if ( setjmp( error_handler_target() ) )
-                throw_jpeg_error();
+            #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+                if ( setjmp( error_handler_target() ) )
+                    throw_jpeg_error();
+            #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
             if ( state == DSTATE_SCANNING )
                 abort();
@@ -651,15 +689,7 @@ private:
         while ( number_of_rows_to_skip_using_raw )
         {
             unsigned int const lines_to_read( _countof( dummy_component_2d_array ) );
-            BOOST_VERIFY
-            (
-                jpeg_read_raw_data
-                (
-                    &mutable_this().decompressor(),
-                    dummy_scan_lines,
-                    lines_to_read
-                ) == lines_to_read
-            );
+            read_raw_data( dummy_scan_lines, lines_to_read );
             number_of_rows_to_skip_using_raw -= lines_to_read;
         }
 
@@ -667,16 +697,39 @@ private:
         mutable_this().decompressor().global_state = DSTATE_SCANNING;
         while ( number_of_rows_to_skip_using_scanlines-- )
         {
-            BOOST_VERIFY
-            (
-                jpeg_read_scanlines
-                (
-                    &mutable_this().decompressor(),
-                    &dummy_scanline_buffer,
-                    1
-                ) == 1
-            );
+            read_scanline( dummy_scanline_buffer );
         }
+    }
+
+    unsigned int read_scanlines( JSAMPROW scanlines[], unsigned int const scanlines_to_read ) const BOOST_GIL_CAN_THROW
+    {
+        return jpeg_read_scanlines
+        (
+            &mutable_this().decompressor(),
+            scanlines,
+            scanlines_to_read
+        );
+    }
+
+    void read_scanline( JSAMPROW scanline ) const BOOST_GIL_CAN_THROW
+    {
+        BOOST_VERIFY
+        (
+            read_scanlines( &scanline, 1 ) == 1
+        );
+    }
+
+    void read_raw_data( JSAMPARRAY scanlines[], unsigned int const scanlines_to_read ) const BOOST_GIL_CAN_THROW
+    {
+        BOOST_VERIFY
+        (
+            jpeg_read_raw_data
+            (
+                &mutable_this().decompressor(),
+                scanlines,
+                scanlines_to_read
+            ) == scanlines_to_read
+        );
     }
 
     libjpeg_image & mutable_this() const { return static_cast<libjpeg_image &>( libjpeg_base::mutable_this() ); }
@@ -684,6 +737,123 @@ private:
 private:
     friend class libjpeg_view_base;
 
+    void read_header()
+    {
+        BOOST_VERIFY( jpeg_read_header( &decompressor(), true ) == JPEG_HEADER_OK );
+
+        io_error_if( decompressor().data_precision != 8, "Unsupported image file data precision." );
+    }
+
+    // Unextracted "libjpeg_reader" interface.
+    void setup_source()
+    {
+        source_manager_.next_input_byte = read_buffer_.begin();
+        source_manager_.bytes_in_buffer = 0;
+
+        BOOST_ASSERT( decompressor().src == NULL );
+        decompressor().src = &source_manager_;
+    }
+
+    void setup_source( FILE & file )
+    {
+        setup_source();
+
+        decompressor().client_data = &file;
+
+        source_manager_.init_source       = &init_FILE_source      ;
+        source_manager_.fill_input_buffer = &fill_FILE_buffer      ;
+        source_manager_.skip_input_data   = &skip_FILE_data        ;
+        source_manager_.resync_to_restart = &jpeg_resync_to_restart;
+        source_manager_.term_source       = &term_FILE_source      ;
+    }
+
+    void setup_source( char const * const p_file_name )
+    {
+        FILE * const p_file( /*std*/::fopen( p_file_name, "rb" ) );
+        if ( !p_file )
+            throw_jpeg_error();
+        setup_source( *p_file );
+        source_manager_.term_source = &term_and_close_FILE_source;
+    }
+
+    static void __cdecl init_FILE_source( j_decompress_ptr const p_cinfo )
+    {
+        libjpeg_image & reader( reader( p_cinfo ) );
+
+        reader.source_manager_.next_input_byte = reader.read_buffer_.begin();
+        reader.source_manager_.bytes_in_buffer = 0;
+    }
+
+    static boolean __cdecl fill_FILE_buffer( j_decompress_ptr const p_cinfo )
+    {
+        libjpeg_image & reader( reader( p_cinfo ) );
+
+        std::size_t bytes_read
+        (
+            /*std*/::fread
+            (
+                reader.read_buffer_.begin(),
+                1,
+                reader.read_buffer_.size(),
+                static_cast<FILE *>( reader.decompressor().client_data )
+            )
+        );
+
+        if ( bytes_read == 0 )
+        {
+            // Insert a fake EOI marker (see the comment for the default library
+            // implementation).
+            reader.read_buffer_[ 0 ] = 0xFF;
+            reader.read_buffer_[ 1 ] = JPEG_EOI;
+
+            bytes_read = 2;
+        }
+
+        reader.source_manager_.next_input_byte = reader.read_buffer_.begin();
+        reader.source_manager_.bytes_in_buffer = bytes_read;
+
+        return true;
+    }
+
+    static void __cdecl skip_FILE_data( j_decompress_ptr const p_cinfo, long num_bytes )
+    {
+        libjpeg_image & reader( reader( p_cinfo ) );
+
+        if ( static_cast<std::size_t>( num_bytes ) <= reader.source_manager_.bytes_in_buffer )
+        {
+            reader.source_manager_.next_input_byte += num_bytes;
+            reader.source_manager_.bytes_in_buffer -= num_bytes;
+        }
+        else
+        {
+            num_bytes -= reader.source_manager_.bytes_in_buffer;
+            /*std*/::fseek( static_cast<FILE *>( reader.decompressor().client_data ), num_bytes, SEEK_CUR ); //...failure?
+            reader.source_manager_.next_input_byte = 0;
+            reader.source_manager_.bytes_in_buffer = 0;
+        }
+    }
+
+    static void __cdecl term_FILE_source( j_decompress_ptr  /*p_cinfo*/ )
+    {
+    }
+
+    // Ensure that jpeg_finish_decompress() is called so that this gets called...
+    static void __cdecl term_and_close_FILE_source( j_decompress_ptr const p_cinfo )
+    {
+        term_FILE_source( p_cinfo );
+        BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( reader( p_cinfo ).decompressor().client_data ) ) == 0 );
+    }
+
+    static libjpeg_image & reader(  j_decompress_ptr const p_cinfo )
+    {
+        libjpeg_image & reader( static_cast<libjpeg_image &>( base( gil_reinterpret_cast<j_common_ptr>( p_cinfo ) ) ) );
+        BOOST_ASSERT( p_cinfo->src == &reader.source_manager_ );
+        return reader;
+    }
+
+private:
+    jpeg_source_mgr     source_manager_;
+    array<JOCTET, 4096> read_buffer_   ;
 };
 
 #if defined(BOOST_MSVC)

@@ -35,6 +35,12 @@ namespace detail
     #endif
 #endif
 
+#ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #define BOOST_GIL_CAN_THROW throw(...)
+#else
+    #define BOOST_GIL_CAN_THROW
+#endif
+
 //------------------------------------------------------------------------------
 } // namespace detail
 //------------------------------------------------------------------------------
