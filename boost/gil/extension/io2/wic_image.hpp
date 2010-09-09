@@ -319,7 +319,7 @@ public:
         //CComQIPtr<IWICPixelFormatInfo> p_pixel_format_info;
         //p_component_info->QueryInterface( );(IID_IWICPixelFormatInfo
         CComQIPtr<IWICPixelFormatInfo> const p_pixel_format_info( p_component_info );
-        io_error_if( !p_pixel_format_info, "WIC failure" );
+        io_error_if_not( p_pixel_format_info, "WIC failure" );
         unsigned int bits_per_pixel;
         verify_result( p_pixel_format_info->GetBitsPerPixel( &bits_per_pixel ) );
         return bits_per_pixel;
