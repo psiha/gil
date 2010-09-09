@@ -405,7 +405,7 @@ private: // Private formatted_image_base interface.
     }
 
 
-    void copy_to_target( detail::formatted_image_traits<wic_image>::view_data_t const & view_data ) const
+    void raw_copy_to_prepared_view( detail::formatted_image_traits<wic_image>::view_data_t const & view_data ) const
     {
         detail::ensure_result
         (
