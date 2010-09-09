@@ -521,7 +521,7 @@ protected:
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
     {
-        return other_format != impl().closest_gil_supported_format();
+        return static_cast<bool>( other_format != impl().closest_gil_supported_format() );
     }
 
     template <class View>
