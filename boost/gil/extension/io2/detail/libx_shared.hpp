@@ -22,6 +22,7 @@
 #include "../../../utilities.hpp"
 #include "io_error.hpp"
 
+#include "boost/assert.hpp"
 #include "boost/noncopyable.hpp"
 
 #include "crtdefs.h"
@@ -36,7 +37,6 @@ namespace gil
 namespace detail
 {
 //------------------------------------------------------------------------------
-
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -71,7 +71,6 @@ private:
 };
 
 
-
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// \class c_file_guard
@@ -81,18 +80,90 @@ private:
 class c_file_guard : noncopyable
 {
 public:
-    c_file_guard( char const * const file_name )
+    c_file_guard( char const * const file_name, char const * const mode )
         :
-        p_file_( /*std*/::fopen( file_name, "rb" ) )
+        p_file_( /*std*/::fopen( file_name, mode ) )
     {
-        io_error_if( !p_file_, "File open failure" );
+        io_error_if_not( p_file_, "File open failure" );
     }
-    ~c_file_guard() { /*std*/::fclose( p_file_ ); }
+    ~c_file_guard() { BOOST_VERIFY( /*std*/::fclose( p_file_ ) == 0 ); }
 
     FILE & get() const { return *p_file_; }
 
 private:
     FILE * const p_file_;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class c_file_input_guard
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class c_file_input_guard : public c_file_guard
+{
+public:
+    c_file_input_guard( char const * const file_name ) : c_file_guard( file_name, "rb" ) {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class c_file_output_guard
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class c_file_output_guard : public c_file_guard
+{
+public:
+    c_file_output_guard( char const * const file_name ) : c_file_guard( file_name, "wb" ) {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class input_c_str_for_c_file_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from FILE objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class c_file_capable_class>
+class input_c_str_for_c_file_extender
+    :
+    private c_file_input_guard,
+    public  c_file_capable_class
+{
+public:
+    input_c_str_for_c_file_extender( char const * const file_path )
+        :
+        c_file_input_guard  ( file_path           ),
+        c_file_capable_class( c_file_guard::get() )
+    {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class output_c_str_for_c_file_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from FILE objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class c_file_capable_class>
+class output_c_str_for_c_file_extender
+    :
+    private c_file_output_guard,
+    public  c_file_capable_class
+{
+public:
+    output_c_str_for_c_file_extender( char const * const file_path )
+        :
+        c_file_output_guard ( file_path           ),
+        c_file_capable_class( c_file_guard::get() )
+    {}
 };
 
 

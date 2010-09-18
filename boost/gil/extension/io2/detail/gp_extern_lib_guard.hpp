@@ -55,6 +55,7 @@ namespace gil
 
 #else // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) != BOOST_LIB_LINK_LOADTIME_OR_STATIC
 
+//------------------------------------------------------------------------------
 } // namespace gil
 
 /// \todo This 'configurability' needs to be handled better.
@@ -64,12 +65,15 @@ inline void win32_lib_handle::ensure() const
     gil::io_error_if( !lib_handle(), "Boost.GIL failed to load external library." );
 }
 
+//------------------------------------------------------------------------------
 } // namespace boost
 
 namespace Gdiplus
 {
+//------------------------------------------------------------------------------
 namespace DllExports
 {
+//------------------------------------------------------------------------------
 
 #define ALWAYS 1
 
@@ -105,7 +109,8 @@ BOOST_DELAYED_EXTERN_LIB_GUARD
 #undef GP1_1
 #undef GP_FUNCTION
 
-}
+//------------------------------------------------------------------------------
+} // namespace DllExports
 
 // Implementation note:
 //   GDI+ puts all functions in the DllExports namespace (hides the 'flat API')
@@ -129,104 +134,121 @@ extern "C" VOID WINAPI GdiplusShutdown( ULONG_PTR const token )
     return DllExports::GdiplusShutdown( token );
 }
 
-}
+//------------------------------------------------------------------------------
+} // namespace GdiPlus
 
 namespace boost
 {
+//------------------------------------------------------------------------------
 namespace gil
 {
+//------------------------------------------------------------------------------
 namespace detail
 {
-    typedef Gdiplus::DllExports::gp_guard_base gp_guard_base;
+//------------------------------------------------------------------------------
 
-    #if BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_LINK_RUNTIME_ASSUME_LOADED
-        // The user/gil_io_lib_guard loads the lib.
-        typedef
-            BOOST_PP_IF
-            (
-                BOOST_PP_GREATER( BOOST_LIB_LOADING( BOOST_GIL_EXTERNAL_LIB ), BOOST_LIB_LOADING_SINGLE ),
-                win32_reloadable_lib_guard,
-                win32_delayloaded_lib_guard
-            ) gil_io_lib_guard_base_helper;
+typedef Gdiplus::DllExports::gp_guard_base gp_guard_base;
 
-        class gil_io_lib_guard_base : gil_io_lib_guard_base_helper
+#if BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_LINK_RUNTIME_ASSUME_LOADED
+    // The user/gil_io_lib_guard loads the lib.
+    typedef
+        BOOST_PP_IF
+        (
+            BOOST_PP_GREATER( BOOST_LIB_LOADING( BOOST_GIL_EXTERNAL_LIB ), BOOST_LIB_LOADING_SINGLE ),
+            win32_reloadable_lib_guard,
+            win32_delayloaded_lib_guard
+        ) gil_io_lib_guard_base_helper;
+
+    class gil_io_lib_guard_base : gil_io_lib_guard_base_helper
+    {
+    public:
+        template <typename Char>
+        gil_io_lib_guard_base( Char const * const lib_name )
+            : gil_io_lib_guard_base_helper( lib_name )
         {
-        public:
-            template <typename Char>
-            gil_io_lib_guard_base( Char const * const lib_name )
-                : gil_io_lib_guard_base_helper( lib_name )
-            {
-                #if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_ASSUME
-                // The user/gil_io_lib_guard inits the lib so it also has to
-                // init the function pointers (required for initialization).
-                    gp_guard_base::init_functions( lib_handle() );
-                #endif // BOOST_LIB_INIT_ASSUME
-            }
-        };
+            #if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_ASSUME
+            // The user/gil_io_lib_guard inits the lib so it also has to
+            // init the function pointers (required for initialization).
+                gp_guard_base::init_functions( lib_handle() );
+            #endif // BOOST_LIB_INIT_ASSUME
+        }
+    };
 
-    #else // BOOST_LIB_LINK_RUNTIME_AUTO_LOAD
-        // GIL loads the lib automatically every time.
-        typedef dummy_lib_guard gil_io_lib_guard_base;
+#else // BOOST_LIB_LINK_RUNTIME_AUTO_LOAD
+    // GIL loads the lib automatically every time.
+    typedef dummy_lib_guard gil_io_lib_guard_base;
 
-    #endif // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB )
+#endif // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB )
 
+//------------------------------------------------------------------------------
 } // namespace detail
 
 #endif // BOOST_LIB_LINK( BOOST_GIL_EXTERNAL_LIB ) != BOOST_LIB_LINK_LOADTIME_OR_STATIC
 
 namespace detail
 {
-    class gp_initialize_guard : noncopyable
-    {
-    public:
-        gp_initialize_guard();
-        ~gp_initialize_guard();
-    private:
-        ULONG_PTR gp_token_;
-    };
+//------------------------------------------------------------------------------
 
-    void ensure_result( Gdiplus::GpStatus );
+class gp_initialize_guard : noncopyable
+{
+public:
+    gp_initialize_guard();
+    ~gp_initialize_guard();
+private:
+    ULONG_PTR gp_token_;
+};
 
-    inline gp_initialize_guard::gp_initialize_guard()
-    {
-        using namespace Gdiplus;
+void ensure_result( Gdiplus::GpStatus );
 
-        #if (GDIPVER >= 0x0110)
-            GdiplusStartupInputEx const gp_startup_input( GdiplusStartupNoSetRound, 0, true, true );
-        #else
-            GdiplusStartupInput   const gp_startup_input(                           0, true, true );
-        #endif //(GDIPVER >= 0x0110)
-        GdiplusStartupOutput gp_startup_output;
-        ensure_result
+inline gp_initialize_guard::gp_initialize_guard()
+{
+    using namespace Gdiplus;
+
+    #if (GDIPVER >= 0x0110)
+        GdiplusStartupInputEx const gp_startup_input( GdiplusStartupNoSetRound, 0, true, true );
+    #else
+        GdiplusStartupInput   const gp_startup_input(                           0, true, true );
+    #endif //(GDIPVER >= 0x0110)
+    GdiplusStartupOutput gp_startup_output;
+    ensure_result
+    (
+        GdiplusStartup
         (
-            GdiplusStartup
-            (
-                &gp_token_,
-                &gp_startup_input,
-                &gp_startup_output
-            )
-        );
-    }
+            &gp_token_,
+            &gp_startup_input,
+            &gp_startup_output
+        )
+    );
+}
 
-    inline gp_initialize_guard::~gp_initialize_guard()
-    {
-        Gdiplus::GdiplusShutdown( gp_token_ );
-    }
+inline gp_initialize_guard::~gp_initialize_guard()
+{
+    Gdiplus::GdiplusShutdown( gp_token_ );
+}
 
-} // namespace detail
 
-class gil_io_lib_guard
+class gp_guard
     :
-    detail::gil_io_lib_guard_base
+    gp_guard_base
+    #if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_AUTO
+        ,gp_initialize_guard
+    #endif
+{};
+
+
+class gp_user_guard
+    :
+    gil_io_lib_guard_base
     #if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_ASSUME
-        ,detail::gp_initialize_guard
+        ,gp_initialize_guard
     #endif // BOOST_LIB_INIT_ASSUME
 {
 public:
-    gil_io_lib_guard() : detail::gil_io_lib_guard_base( L"gdiplus.dll" ) {}
+    gp_user_guard() : gil_io_lib_guard_base( L"gdiplus.dll" ) {}
 };
 
-
+//------------------------------------------------------------------------------
+} // namespace detail
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

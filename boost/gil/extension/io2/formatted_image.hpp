@@ -42,6 +42,7 @@
 #endif // _DEBUG
 #include <boost/range/iterator_range.hpp>
 #include <boost/static_assert.hpp>
+#include <boost/type_traits/decay.hpp>
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -196,6 +197,15 @@ template <class View, typename Offset>
 offset_view_t<View, Offset> offset_view( View const & view, Offset const & offset ) { return offset_view_t<View, Offset>( view, offset ); }
 
 
+////////////////////////////////////////////////////////////////////////////////
+/// \class formatted_image_traits
+/// ( forward declaration )
+////////////////////////////////////////////////////////////////////////////////
+
+template <class Impl>
+struct formatted_image_traits;
+
+
 namespace detail
 {
 //------------------------------------------------------------------------------
@@ -239,6 +249,65 @@ struct get_original_view_t<image_view<Locator> > { typedef image_view<Locator> t
 
 template <typename View, typename Offset>
 struct get_original_view_t<offset_view_t<View, Offset> > { typedef View type; };
+
+// Tag base classes for writer implementations.
+struct configure_on_write_writer {};
+struct open_on_write_writer      {};
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class open_then_configure_writer_wrapper
+/// \internal
+/// \brief Helper wrapper for backends/writers that first need to open the
+/// target/file and then be configured for the desired view.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename Writer, typename WriterTarget, typename ViewDataHolder>
+class open_then_configure_writer_wrapper : public Writer
+{
+public:
+    template <typename View>
+    open_then_configure_writer_wrapper( WriterTarget const target, View const & view )
+        :
+        Writer    ( target ),
+        view_data_( view   )
+    {}
+
+    void write_default() { Writer::write_default( view_data_ ); }
+    void write        () { Writer::write        ( view_data_ ); }
+
+private:
+    ViewDataHolder const view_data_;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class configure_then_open_writer_wrapper
+/// \internal
+/// \brief Helper wrapper for backends/writers that first need to be configured
+/// for/created from the desired view and then open the target/file.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename Writer, typename WriterTarget>
+class configure_then_open_writer_wrapper : public Writer
+{
+public:
+    template <typename View>
+    configure_then_open_writer_wrapper( WriterTarget const target, View const & view )
+        :
+        Writer ( view   ),
+        target_( target )
+    {}
+
+    void write_default() { Writer::write_default( target_ ); }
+    void write        () { Writer::write        ( target_ ); }
+
+private:
+    WriterTarget const target_;
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -374,19 +443,7 @@ protected:
     protected:
         any_image<Images> & image_;
     };
-
 };
-
-
-
-
-////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
-/// ( forward declaration )
-////////////////////////////////////////////////////////////////////////////////
-
-template <class Impl>
-struct formatted_image_traits;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -413,10 +470,32 @@ public:
     struct reader_for
         : public mpl::at<typename formatted_image_traits<Impl>::readers, Source> {};
 
+    template <typename Target>
+    struct writer_for
+    {
+    private:
+        typedef typename mpl::at<typename formatted_image_traits<Impl>::writers, Target>::type writer_t;
+
+    public:
+        typedef typename mpl::if_
+                         <
+                            is_base_of<configure_on_write_writer, writer_t>,
+                            open_then_configure_writer_wrapper<writer_t, Target, typename formatted_image_traits<Impl>::writer_view_data_t>,
+                            typename mpl::if_
+                            <
+                                is_base_of<open_on_write_writer, writer_t>,
+                                configure_then_open_writer_wrapper<writer_t, Target>,
+                                writer_t
+                            >::type
+                         >::type type;
+    };
+
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
 
 protected:
-    typedef formatted_image base_t;
+    typedef          formatted_image                           base_t;
+
+    typedef typename formatted_image_traits<Impl>::view_data_t view_data_t;
 
 private:
     template <typename Images, typename dimensions_policy, typename formats_policy>
@@ -492,8 +571,9 @@ private:
     };
 
 private:
-    Impl       & impl()       { return static_cast<Impl       &>( *this ); }
-    Impl const & impl() const { return static_cast<Impl const &>( *this ); }
+    // ...zzz...MSVC++ 10 generates code to check whether this == 0.txt...investigate...
+    Impl       & impl()       { __assume( this != 0 ); return static_cast<Impl       &>( *this ); }
+    Impl const & impl() const { __assume( this != 0 ); return static_cast<Impl const &>( *this ); }
 
 protected:
     template <typename View>
@@ -521,7 +601,7 @@ protected:
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
     {
-        return static_cast<bool>( other_format != impl().closest_gil_supported_format() );
+        return ( other_format != impl().closest_gil_supported_format() ) != false;
     }
 
     template <class View>
@@ -560,7 +640,7 @@ public: // Views...
         BOOST_ASSERT( !impl().formats_mismatch<View>()    );
         impl().raw_copy_to_prepared_view
         (
-            formatted_image_traits<Impl>::view_data_t
+            view_data_t
             (
                 original_view       ( view ),
                 get_offset<offset_t>( view )
@@ -667,6 +747,19 @@ public: // Images...
             runtime_view,
             dynamic_io_fnobj<write_is_supported, op_t>( &op )
         );
+    }
+
+public: // Utility 'quick-wrappers'...
+    template <class Source, class Image>
+    static void read( Source const & target, Image & image )
+    {
+        typename reader_for<typename decay<Source>::type>::type( target ).copy_to_image( image, synchronize_dimensions(), synchronize_formats() );
+    }
+
+    template <class Target, class View>
+    static void write( Target const & target, View const & view )
+    {
+        typename writer_for<typename decay<Target>::type>::type( target, view ).write_default();
     }
 
 private:
@@ -814,7 +907,7 @@ private:
         unsigned int const current_image_format_id( impl().image_format_id( current_format ) );
         if ( can_do_inplace_transform<View>( current_format ) )
         {
-            typename formatted_image_traits<Impl>::view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
+            view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
             view_data.set_format( current_format );
             impl().raw_copy_to_prepared_view( view_data );
             in_place_transform( current_image_format_id, original_view( view ), converter );
@@ -836,7 +929,7 @@ private:
     {
         impl().raw_convert_to_prepared_view
         (
-            formatted_image_traits<Impl>::view_data_t
+            view_data_t
             (
                 original_view       ( view ),
                 get_offset<offset_t>( view )

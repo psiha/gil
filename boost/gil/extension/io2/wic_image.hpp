@@ -42,23 +42,22 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
-
-class wic_image;
-
 namespace detail
 {
 //------------------------------------------------------------------------------
 
-template <GUID const & guid>
+typedef WICPixelFormatGUID const & wic_format_t;
+
+template <wic_format_t guid>
 struct format_guid
 {
     typedef format_guid type;
 
-    static GUID const & value;
+    static wic_format_t & value;
 };
 
-template <GUID const & guid>
-GUID const & format_guid<guid>::value( guid );
+template <wic_format_t guid>
+wic_format_t format_guid<guid>::value( guid );
 
 template <typename Pixel, bool IsPlanar>
 struct gil_to_wic_format : format_guid<GUID_WICPixelFormatUndefined> {};
@@ -74,7 +73,7 @@ template <> struct gil_to_wic_format<bgr16_pixel_t     , false> : format_guid<GU
 template <> struct gil_to_wic_format<bgra16_pixel_t    , false> : format_guid<GUID_WICPixelFormat64bppBGRA  > {};
 template <> struct gil_to_wic_format<cmyk8_pixel_t     , false> : format_guid<GUID_WICPixelFormat32bppCMYK  > {};
 
-template <GUID const & wic_format>
+template <wic_format_t wic_format>
 struct is_supported_format
     : is_same
       <
@@ -132,82 +131,6 @@ public:
 };
 
 
-template <>
-struct formatted_image_traits<wic_image>
-{
-    typedef WICPixelFormatGUID const & format_t;
-
-    typedef wic_supported_pixel_formats supported_pixel_formats_t;
-
-    typedef wic_roi roi_t;
-
-    typedef view_wic_format view_to_native_format;
-
-    template <class View>
-    struct is_supported
-        :
-        mpl::not_
-        <
-            is_same
-            <
-                typename view_wic_format::apply<View>::type,
-                //format_guid<wic_format                  >,
-                format_guid<GUID_WICPixelFormatUndefined>
-            >
-        > {};
-
-    struct view_data_t
-    {
-        template <typename View>
-        view_data_t( View const & view )
-            :
-            p_roi_ ( 0                                   ),
-            format_( view_wic_format::apply<View>::value )
-        {
-            set_bitmapdata_for_view( view );
-        }
-
-        template <typename View>
-        view_data_t( View const & view, wic_roi::offset_t const & offset )
-            :
-            p_roi_ ( static_cast<wic_roi const *>( optional_roi_.address() ) ),
-            format_( view_wic_format::apply<View>::value )
-        {
-            set_bitmapdata_for_view( view );
-            new ( optional_roi_.address() ) wic_roi( offset, width_, height_ );
-        }
-
-        WICRect      const * const p_roi_ ;
-        unsigned int         /*const*/ width_ ;
-        unsigned int         /*const*/ height_;
-        unsigned int         /*const*/ stride_;
-        unsigned int         /*const*/ pixel_size_;
-        BYTE               * /*const*/ p_buffer_;
-        format_t                   format_;
-
-    private:
-        template <typename View>
-        void set_bitmapdata_for_view( View const & view )
-        {
-            width_      = view.width();
-            height_     = view.height();
-            stride_     = view.pixels().row_size();
-            pixel_size_ = memunit_step( typename View::x_iterator() );
-            //format_     = view_wic_format::apply<View>::value;
-            p_buffer_   = formatted_image_base::get_raw_data( view );
-        }
-
-        void operator=( view_data_t const & );
-
-    private:
-        aligned_storage<sizeof( wic_roi ), alignment_of<wic_roi>::value>::type optional_roi_;
-    };
-
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
-    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-};
-
-
 inline void ensure_result( HRESULT const result )
 {
     io_error_if( result != S_OK, "WIC failure"/*error_string( result )*/ );
@@ -218,9 +141,181 @@ inline void verify_result( HRESULT const result )
     BOOST_VERIFY( result == S_OK );
 }
 
+struct wic_view_data_t
+{
+    template <typename View>
+    wic_view_data_t( View const & view )
+        :
+        p_roi_ ( 0                                   ),
+        format_( view_wic_format::apply<View>::value )
+    {
+        set_bitmapdata_for_view( view );
+    }
+
+    template <typename View>
+    wic_view_data_t( View const & view, wic_roi::offset_t const & offset )
+        :
+        p_roi_ ( static_cast<wic_roi const *>( optional_roi_.address() ) ),
+        format_( view_wic_format::apply<View>::value                     )
+    {
+        set_bitmapdata_for_view( view );
+        new ( optional_roi_.address() ) wic_roi( offset, width_, height_ );
+    }
+
+    WICRect      const * const p_roi_ ;
+    unsigned int         /*const*/ width_ ;
+    unsigned int         /*const*/ height_;
+    unsigned int         /*const*/ stride_;
+    unsigned int         /*const*/ pixel_size_;
+    BYTE               * /*const*/ p_buffer_;
+    wic_format_t               format_;
+
+private:
+    template <typename View>
+    void set_bitmapdata_for_view( View const & view )
+    {
+        width_      = view.width();
+        height_     = view.height();
+        stride_     = view.pixels().row_size();
+        pixel_size_ = memunit_step( typename View::x_iterator() );
+        //format_     = view_wic_format::apply<View>::value;
+        p_buffer_   = detail::formatted_image_base::get_raw_data( view );
+    }
+
+    void operator=( wic_view_data_t const & );
+
+private:
+    aligned_storage<sizeof( wic_roi ), alignment_of<wic_roi>::value>::type optional_roi_;
+};
+
+
+class wic_writer : public configure_on_write_writer
+{
+public:
+    struct lib_object_t
+    {
+        CComPtr<IWICBitmapFrameEncode>   p_frame_           ;
+        CComPtr<IWICBitmapEncoder    >   p_encoder_         ;
+        IPropertyBag2                  * p_frame_parameters_;
+    };
+
+    lib_object_t & lib_object() { return lib_object_; }
+
+public:
+    wic_writer( IStream & target )
+    {
+        create_encoder( GUID_ContainerFormatPng, target );
+    }
+
+    void write_default( wic_view_data_t const & view_data )
+    {
+        HRESULT hr( frame().Initialize( lib_object().p_frame_parameters_ ) );
+
+        if ( SUCCEEDED( hr ) )
+        {
+            hr = frame().SetSize( view_data.width_, view_data.height_ );
+        }
+
+        if ( SUCCEEDED( hr ) )
+        {
+            WICPixelFormatGUID formatGUID( view_data.format_ );
+            hr = frame().SetPixelFormat( &formatGUID );
+            if ( SUCCEEDED( hr ) )
+            {
+                hr = ( formatGUID == view_data.format_ ) ? S_OK : E_FAIL;
+            }
+        }
+
+        if ( SUCCEEDED( hr ) )
+        {
+            hr = frame().WritePixels( view_data.height_, view_data.stride_, view_data.height_ * view_data.stride_, view_data.p_buffer_ );
+        }
+
+        if ( SUCCEEDED( hr ) )
+        {
+            hr = frame().Commit();
+        }
+
+        if ( SUCCEEDED( hr ) )
+        {
+            hr = encoder().Commit();
+        }
+
+        ensure_result( hr );
+    }
+
+    void write( wic_view_data_t const & view_data ) { write_default( view_data ); }
+
+private:
+    void create_encoder( GUID const & format, IStream & target )
+    {
+        ensure_result( wic_factory<>::singleton().CreateEncoder( format, NULL, &lib_object().p_encoder_ ) );
+        ensure_result( lib_object().p_encoder_->Initialize( &target, WICBitmapEncoderNoCache )            );
+        ensure_result( lib_object().p_encoder_->CreateNewFrame( &lib_object().p_frame_, &lib_object().p_frame_parameters_ ) );
+    }
+
+    IWICBitmapFrameEncode & frame  () { return *lib_object().p_frame_  ; }
+    IWICBitmapEncoder     & encoder() { return *lib_object().p_encoder_; }
+    
+private:
+    lib_object_t lib_object_;
+};
+
 //------------------------------------------------------------------------------
 } // namespace detail
 
+class wic_image;
+
+template <>
+struct formatted_image_traits<wic_image>
+{
+    typedef detail::wic_format_t format_t;
+
+    typedef detail::wic_supported_pixel_formats supported_pixel_formats_t;
+
+    typedef detail::wic_roi roi_t;
+
+    typedef detail::view_wic_format view_to_native_format;
+
+    template <class View>
+    struct is_supported
+        :
+        mpl::not_
+        <
+            is_same
+            <
+                typename view_to_native_format::apply<View>::type,
+                //format_guid<wic_format                  >,
+                detail::format_guid<GUID_WICPixelFormatUndefined>
+            >
+        > {};
+
+    typedef mpl::map6
+    <
+        mpl::pair<char                    const *,                                                    wic_image  >,
+        mpl::pair<wchar_t                 const *,                                                    wic_image  >,
+        mpl::pair<HANDLE                         ,                                                    wic_image  >,
+        mpl::pair<IStream                       &,                                                    wic_image  >,
+        mpl::pair<FILE                          &, detail::input_FILE_for_IStream_extender           <wic_image> >,
+        mpl::pair<writable_memory_chunk_t const &, detail::writable_memory_chunk_for_IStream_extender<wic_image> >
+    > readers;
+
+    typedef mpl::map4
+    <
+        mpl::pair<char           const *,  detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
+        //mpl::pair<wchar_t        const *,                                           wic_image  >,
+        mpl::pair<IStream              &,                                           detail::wic_writer  >,
+        mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >,
+        mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<detail::wic_writer> >
+    > writers;
+
+    typedef detail::wic_view_data_t view_data_t       ;
+    typedef view_data_t             writer_view_data_t;
+
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
+    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
+    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = true      );
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,9 +334,9 @@ class wic_image
 public:
     // Implementation note:
     //   The IWICBitmapDecoder instance is not otherwise necessary once an
-    // IWICBitmapDecoder is created but we keep it here and make it accessible
-    // to the user to enable the use of multi frame/page/picture formats like
-    // GIF and TIFF.
+    // IWICBitmapFrameDecode instance is created but we keep it here and make it
+    // accessible to the user to enable the use of multi frame/page/picture
+    // formats like GIF and TIFF.
     //                                        (26.07.2010.) (Domagoj Saric)
     typedef std::pair
             <
@@ -249,7 +344,7 @@ public:
                 CComPtr<IWICBitmapDecoder    >
             > lib_object_t;
 
-    typedef detail::wic_user_guard guard_t;
+    typedef detail::wic_user_guard guard;
 
 public:
     explicit wic_image( wchar_t const * const filename )
@@ -305,8 +400,9 @@ public:
     point2<std::ptrdiff_t> dimensions() const
     {
         using namespace detail;
-        aligned_storage<sizeof( wic_roi ), alignment_of<wic_roi>::value>::type placeholder;
-        point2<std::ptrdiff_t> & result( *gil_reinterpret_cast<point2<std::ptrdiff_t> *>( placeholder.address() ) );
+        typedef point2<std::ptrdiff_t> result_t;
+        aligned_storage<sizeof( result_t ), alignment_of<result_t>::value>::type placeholder;
+        result_t & result( *gil_reinterpret_cast<result_t *>( placeholder.address() ) );
         verify_result( frame_decoder().GetSize( gil_reinterpret_cast<UINT *>( &result.x ), gil_reinterpret_cast<UINT *>( &result.y ) ) );
         return result;
     }
@@ -349,7 +445,6 @@ private: // Private formatted_image_base interface.
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
         BOOST_ASSERT( !dimensions_mismatch( view ) );
-        //BOOST_ASSERT( !formats_mismatch   ( view ) );
 
         using namespace detail;
 
@@ -385,7 +480,7 @@ private: // Private formatted_image_base interface.
     }
 
 
-    void raw_convert_to_prepared_view( detail::formatted_image_traits<wic_image>::view_data_t const & view_data ) const
+    void raw_convert_to_prepared_view( view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.format_ != GUID_WICPixelFormatUndefined ); //...zzz...
         using namespace detail;
@@ -405,7 +500,7 @@ private: // Private formatted_image_base interface.
     }
 
 
-    void raw_copy_to_prepared_view( detail::formatted_image_traits<wic_image>::view_data_t const & view_data ) const
+    void raw_copy_to_prepared_view( view_data_t const & view_data ) const
     {
         detail::ensure_result
         (

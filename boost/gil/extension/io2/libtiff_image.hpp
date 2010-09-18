@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file libtiff_private_base.hpp
-/// ------------------------------
+/// \file libtiff_image.hpp
+/// -----------------------
 ///
 /// Copyright (c) Domagoj Saric 2010.
 ///
@@ -14,8 +14,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef libtiff_private_base_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
-#define libtiff_private_base_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
+#ifndef libtiff_image_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
+#define libtiff_image_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
 
@@ -65,7 +65,6 @@ unsigned short const unknown( static_cast<unsigned short>( -1 ) );
         LIBTIFF_PHOTOMETRIC( photometric_interpretation ) |                                             \
         LIBTIFF_INKSET(      inkset                     )                                               \
     )
-
 
 
 union full_format_t
@@ -204,9 +203,6 @@ inline void FILE_unmap_proc( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*si
 }
 
 
-struct libtiff_guard {};
-
-
 #if defined(BOOST_MSVC)
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
@@ -216,13 +212,13 @@ struct libtiff_guard {};
 struct tiff_view_data_t
 {
     template <class View>
-    tiff_view_data_t( View const & view, generic_vertical_roi::offset_t const offset )
+    explicit tiff_view_data_t( View const & view, generic_vertical_roi::offset_t const offset )
         :
         offset_    ( offset                                     ),
         dimensions_( view.dimensions()                          ),
         stride_    ( view.pixels().row_size()                   )
         #ifdef _DEBUG
-            ,format_( view_libtiff_format::apply<View>::value   )
+            ,format_id_( view_libtiff_format::apply<View>::value   )
         #endif
     {
         set_buffers( view, is_planar<View>() );
@@ -230,7 +226,7 @@ struct tiff_view_data_t
 
     void set_format( full_format_t::format_id const format )
     {
-        //BOOST_ASSERT( ( format_ == format ) && !"libtiff does not provide builtin conversion." );
+        BOOST_ASSERT( ( format_id_ == format ) && !"libtiff does not provide builtin conversion." );
         ignore_unused_variable_warning( format );
     }
 
@@ -241,7 +237,7 @@ struct tiff_view_data_t
     array<unsigned char *, 4>              plane_buffers_;
 
     #ifdef _DEBUG
-        unsigned int format_;
+        unsigned int format_id_;
     #endif
 
 private: // this should probably go to the base formatted_image class...
@@ -265,68 +261,208 @@ private: // this should probably go to the base formatted_image class...
     void operator=( tiff_view_data_t const & );
 };
 
-class libtiff_image;
-
-template <>
-struct formatted_image_traits<libtiff_image>
+struct tiff_writer_view_data_t : public tiff_view_data_t
 {
-    typedef full_format_t::format_id format_t;
-
-    typedef libtiff_supported_pixel_formats supported_pixel_formats_t;
-
-    typedef generic_vertical_roi roi_t;
-
-    typedef view_libtiff_format view_to_native_format;
-
-    typedef tiff_view_data_t view_data_t;
-
     template <class View>
-    struct is_supported : mpl::true_ {};
-
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment = 0 );
-
-    BOOST_STATIC_CONSTANT( bool, builtin_conversion = false );
-};
-
-
-class libtiff_image
-    :
-    public  detail::formatted_image<libtiff_image>
-{
-public: /// \ingroup Construction
-    explicit libtiff_image( char const * const file_name )
+    tiff_writer_view_data_t( View const & view )
         :
-        p_tiff_( ::TIFFOpen( file_name, "r" ) )
+        tiff_view_data_t( view, 0 )
     {
-        BOOST_ASSERT( file_name );
-        constructor_tail();
+        format_.number = view_libtiff_format::apply<View>::value;
     }
 
-    explicit libtiff_image( FILE * const p_file )
+    full_format_t format_;
+};
+
+class libtiff_base
+{
+public:
+    TIFF & lib_object() const { BOOST_ASSERT( p_tiff_ ); return *p_tiff_; }
+
+protected:
+    libtiff_base( char const * const file_name, char const * const access_mode )
+        :
+        p_tiff_( ::TIFFOpen( file_name, access_mode ) )
+    {
+        BOOST_ASSERT( file_name );
+        construction_check();
+    }
+
+    explicit libtiff_base( FILE & file )
         :
         p_tiff_
         (
             ::TIFFClientOpen
             (
                 "", "",
-                p_file,
-                &FILE_read_proc,
-                &FILE_write_proc,
-                &FILE_seek_proc,
-                &FILE_close_proc_nop,
-                &FILE_size_proc,
-                &FILE_map_proc,
-                &FILE_unmap_proc
+                &file,
+                &detail::FILE_read_proc,
+                &detail::FILE_write_proc,
+                &detail::FILE_seek_proc,
+                &detail::FILE_close_proc_nop,
+                &detail::FILE_size_proc,
+                &detail::FILE_map_proc,
+                &detail::FILE_unmap_proc
             )
         )
     {
-        BOOST_ASSERT( p_file );
-        constructor_tail();
+        construction_check();
     }
 
-    ~libtiff_image()
+
+    ~libtiff_base()
     {
-        ::TIFFClose( p_tiff_ );
+        ::TIFFClose( &lib_object() );
+    }
+
+protected:
+    class cumulative_result : public detail::cumulative_result
+    {
+    public:
+        void throw_if_error() const { detail::cumulative_result::throw_if_error( "Error reading TIFF file" ); }
+    };
+
+private:
+    void construction_check() const
+    {
+        io_error_if_not( p_tiff_, "Failed to open TIFF input file" );
+    }
+
+private:
+    TIFF * const p_tiff_;
+};
+
+class libtiff_writer : public libtiff_base, public configure_on_write_writer
+{
+public:
+    explicit libtiff_writer( char const * const file_name ) : detail::libtiff_base( file_name, "w" ) {}
+
+    explicit libtiff_writer( FILE & file ) : detail::libtiff_base( file ) {}
+
+    void write_default( tiff_writer_view_data_t const & view )
+    {
+        full_format_t::format_bitfield const format_bits( view.format_.bits );
+        //BOOST_ASSERT( ( format_bits.planar_configuration == PLANARCONFIG_CONTIG ) && "Add planar support..." );
+
+        set_field( TIFFTAG_IMAGEWIDTH , view.dimensions_.x );
+        set_field( TIFFTAG_IMAGELENGTH, view.dimensions_.y );
+        set_field( TIFFTAG_BITSPERSAMPLE, format_bits.bits_per_sample );
+        set_field( TIFFTAG_SAMPLESPERPIXEL, format_bits.samples_per_pixel );
+        set_field( TIFFTAG_PLANARCONFIG, format_bits.planar_configuration );
+        set_field( TIFFTAG_PHOTOMETRIC, format_bits.photometric );
+        set_field( TIFFTAG_INKSET, format_bits.ink_set );
+        set_field( TIFFTAG_SAMPLEFORMAT, format_bits.sample_format );
+
+        set_field( TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT );
+
+        if ( format_bits.samples_per_pixel == 4 && format_bits.photometric == PHOTOMETRIC_RGB )
+        {
+            uint16 const type( EXTRASAMPLE_UNASSALPHA );
+            set_field( TIFFTAG_EXTRASAMPLES, 1, &type );
+        }
+
+        write( view );
+    }
+
+    void write( tiff_writer_view_data_t const & view )
+    {
+        cumulative_result result;
+
+        for ( unsigned int plane( 0 ); plane < view.number_of_planes_; ++plane )
+        {
+            unsigned char * buf( view.plane_buffers_[ plane ] );
+
+            unsigned int       row       ( 0                  );
+            unsigned int const target_row( view.dimensions_.y );
+            while ( row < target_row )
+            {
+                result.accumulate_equal( ::TIFFWriteScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                buf += view.stride_;
+            }
+        }
+
+        result.throw_if_error();
+    }
+
+private:
+    template <typename T>
+    void set_field( ttag_t const tag, T value )
+    {
+        BOOST_VERIFY( ::TIFFVSetField( &lib_object(), tag, gil_reinterpret_cast<va_list>( &value ) ) );
+    }
+
+    template <typename T1, typename T2>
+    void set_field( ttag_t const tag, T1 const value1, T2 const value2 )
+    {
+        BOOST_VERIFY( ::TIFFSetField( &lib_object(), tag, value1, value2 ) );
+    }
+};
+
+//------------------------------------------------------------------------------
+} // namespace detail
+
+class libtiff_image;
+
+template <>
+struct formatted_image_traits<libtiff_image>
+{
+    typedef detail::full_format_t::format_id format_t;
+
+    typedef detail::libtiff_supported_pixel_formats supported_pixel_formats_t;
+
+    typedef detail::generic_vertical_roi roi_t;
+
+    typedef detail::view_libtiff_format view_to_native_format;
+
+    typedef detail::tiff_view_data_t view_data_t;
+
+    template <class View>
+    struct is_supported : mpl::true_ {}; //...zzz...
+
+    typedef mpl::map2
+    <
+        mpl::pair<char const *, libtiff_image>,
+        mpl::pair<FILE       &, libtiff_image>
+    > readers;
+
+    typedef mpl::map2
+    <
+        mpl::pair<char const *, detail::libtiff_writer>,
+        mpl::pair<FILE       &, detail::libtiff_writer>
+    > writers;
+
+    typedef detail::tiff_writer_view_data_t writer_view_data_t;
+
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void *) );
+    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = false           );
+    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = false    );
+};
+
+
+class libtiff_image
+    :
+    public detail::libtiff_base,
+    public detail::formatted_image<libtiff_image>
+{
+private:
+    typedef detail::full_format_t full_format_t;
+
+public:
+    struct guard {};
+
+public: /// \ingroup Construction
+    explicit libtiff_image( char const * const file_name )
+        :
+        detail::libtiff_base( file_name, "r" )
+    {
+        get_format();
+    }
+
+    explicit libtiff_image( FILE & file )
+        :
+        detail::libtiff_base( file )
+    {
+        get_format();
     }
 
 public:
@@ -344,18 +480,14 @@ public:
         return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
     }
 
-    full_format_t::format_bitfield const & format_bits() const {return format_.bits; }
-
-
-    TIFF       & lib_object()       { return *p_tiff_; }
-    TIFF const & lib_object() const { return const_cast<libtiff_image &>( *this ).lib_object(); }
+    detail::full_format_t::format_bitfield const & format_bits() const { return format_.bits; }
 
 private:
     template <typename T>
     T get_field( ttag_t const tag ) const
     {
         T value; T * p_value( &value );
-        BOOST_VERIFY( ::TIFFVGetFieldDefaulted( p_tiff_, tag, gil_reinterpret_cast<va_list>( &p_value ) ) );
+        BOOST_VERIFY( ::TIFFVGetFieldDefaulted( &lib_object(), tag, gil_reinterpret_cast<va_list>( &p_value ) ) );
         return value;
     }
 
@@ -363,7 +495,7 @@ private:
     std::pair<T1, T2> get_field( ttag_t const tag, int & cumulative_result ) const
     {
         std::pair<T1, T2> value;
-        cumulative_result &= ::TIFFGetFieldDefaulted( p_tiff_, tag, &value.first, &value.second );
+        cumulative_result &= ::TIFFGetFieldDefaulted( &lib_object(), tag, &value.first, &value.second );
         return value;
     }
 
@@ -405,24 +537,12 @@ private:
             }
         }
 
-        detail::io_error_if( !cumulative_result || unsupported_format || ( orientation != ORIENTATION_TOPLEFT ), "TeeF" );
+        detail::io_error_if( !cumulative_result || unsupported_format || ( orientation != ORIENTATION_TOPLEFT ), "Unsupported TIFF format" );
 
         format_.number = LIBTIFF_FORMAT( samples_per_pixel, bits_per_sample, ( sample_format == SAMPLEFORMAT_VOID ) ? SAMPLEFORMAT_UINT : sample_format, planar_configuration, photometric, ink_set );
     }
 
-
 private:
-    void construction_check() const
-    {
-        detail::io_error_if_not( p_tiff_, "Failed to open TIFF input file" );
-    }
-
-    void constructor_tail()
-    {
-        construction_check();
-        get_format        ();
-    }
-
     static unsigned int round_up_divide( unsigned int const dividend, unsigned int const divisor )
     {
         return ( dividend + divisor - 1 ) / divisor;
@@ -450,9 +570,9 @@ private: // Private formatted_image_base interface.
             rows_to_skip               ( offset % tile_height ),
             number_of_tiles            ( round_up_divide( dimensions.y, tile_height ) * tiles_per_row * ( source.format_bits().planar_configuration == PLANARCONFIG_SEPARATE ? source.format_bits().samples_per_pixel : 1 ) )
         {
-            BOOST_ASSERT( static_cast<tsize_t>( tile_width_bytes ) == ::TIFFTileRowSize( source.p_tiff_ ) );
-            BOOST_ASSERT( static_cast<tsize_t>( tile_size_bytes  ) == ::TIFFTileSize   ( source.p_tiff_ ) );
-            BOOST_ASSERT( starting_tile + number_of_tiles <= ::TIFFNumberOfTiles( source.p_tiff_ ) );
+            BOOST_ASSERT( static_cast<tsize_t>( tile_width_bytes ) == ::TIFFTileRowSize( &source.lib_object() ) );
+            BOOST_ASSERT( static_cast<tsize_t>( tile_size_bytes  ) == ::TIFFTileSize   ( &source.lib_object() ) );
+            BOOST_ASSERT( starting_tile + number_of_tiles <= ::TIFFNumberOfTiles( &source.lib_object() ) );
             if ( tile_height > static_cast<uint32>( dimensions.y ) )
             {
                 rows_to_read_per_tile = end_rows_to_read = dimensions.y;
@@ -505,17 +625,11 @@ private: // Private formatted_image_base interface.
         unsigned int starting_strip;
     };
 
-    class cumulative_result : public detail::cumulative_result
-    {
-    public:
-        void throw_if_error() const { detail::cumulative_result::throw_if_error( "Error reading TIFF file" ); }
-    };
-
-    void raw_copy_to_prepared_view( tiff_view_data_t const view_data ) const
+    void raw_copy_to_prepared_view( view_data_t const & view_data ) const
     {
         cumulative_result result;
 
-        if ( ::TIFFIsTiled( p_tiff_ ) )
+        if ( ::TIFFIsTiled( &lib_object() ) )
         {
             tile_setup_t setup( *this, view_data.dimensions_, view_data.offset_, false );
 
@@ -529,7 +643,7 @@ private: // Private formatted_image_base interface.
                     bool         const last_row_tile        ( !--setup.current_row_tiles_remaining                                     );
                     unsigned int const this_tile_width_bytes( last_row_tile ? setup.last_row_tile_width_bytes : setup.tile_width_bytes );
 
-                    result.accumulate_equal( ::TIFFReadEncodedTile( p_tiff_, current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
+                    result.accumulate_equal( ::TIFFReadEncodedTile( &lib_object(), current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
                     unsigned char const * p_tile_buffer_location( setup.p_tile_buffer.get() + ( setup.rows_to_skip * this_tile_width_bytes ) );
                     unsigned char       * p_target_local        ( p_target                                                                   );
                     for ( unsigned int row( setup.rows_to_skip ); row < setup.rows_to_read_per_tile; ++row )
@@ -556,7 +670,7 @@ private: // Private formatted_image_base interface.
         }
         else
         {
-            BOOST_ASSERT( ::TIFFScanlineSize( p_tiff_ ) <= static_cast<tsize_t>( view_data.stride_ ) );
+            BOOST_ASSERT( ::TIFFScanlineSize( &lib_object() ) <= static_cast<tsize_t>( view_data.stride_ ) );
             for ( unsigned int plane( 0 ); plane < view_data.number_of_planes_; ++plane )
             {
                 unsigned char * buf( view_data.plane_buffers_[ plane ] );
@@ -567,16 +681,16 @@ private: // Private formatted_image_base interface.
                 unsigned int row( view_data.offset_ );
                 while ( row != ( view_data.offset_ + skip_result.rows_to_read_using_scanlines ) )
                 {
-                    result.accumulate_equal( ::TIFFReadScanline( p_tiff_, buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                    result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
                     buf += view_data.stride_;
                 }
 
                 unsigned int const view_strip_increment( view_data.stride_ * skip_result.rows_per_strip );
-                if ( view_strip_increment == static_cast<unsigned int>( ::TIFFStripSize( p_tiff_ ) ) )
+                if ( view_strip_increment == static_cast<unsigned int>( ::TIFFStripSize( &lib_object() ) ) )
                 {
                     for ( unsigned int strip( skip_result.starting_strip ); strip < number_of_strips; ++strip )
                     {
-                        result.accumulate_different( ::TIFFReadEncodedStrip( p_tiff_, strip, buf, view_strip_increment ), -1 );
+                        result.accumulate_different( ::TIFFReadEncodedStrip( &lib_object(), strip, buf, view_strip_increment ), -1 );
                         buf += view_strip_increment;
                         row += skip_result.rows_per_strip;
                     }
@@ -585,7 +699,7 @@ private: // Private formatted_image_base interface.
                 unsigned int const target_row( view_data.offset_ + view_data.dimensions_.y );
                 while ( row < target_row )
                 {
-                    result.accumulate_equal( ::TIFFReadScanline( p_tiff_, buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                    result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
                     buf += view_data.stride_;
                 }
             }
@@ -594,6 +708,20 @@ private: // Private formatted_image_base interface.
         result.throw_if_error();
     }
 
+    
+    ////////////////////////////////////////////////////////////////////////////
+    //
+    // generic_convert_to_prepared_view()
+    // ----------------------------------
+    //
+    ////////////////////////////////////////////////////////////////////////////
+    ///
+    /// \todo Cleanup, document, split up and refactor this humongous beast
+    /// (remove duplication, extract non-template and shared functionality...).
+    ///                                    (16.09.2010.) (Domagoj Saric)
+    ///
+    ////////////////////////////////////////////////////////////////////////////
+    
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
@@ -635,7 +763,7 @@ private: // Private formatted_image_base interface.
         // Tiled
         ////////////////////////////////////////////////////////////////////////
 
-        if ( ::TIFFIsTiled( p_tiff_ ) )
+        if ( ::TIFFIsTiled( &lib_object() ) )
         {
             tile_setup_t setup
             (
@@ -679,7 +807,7 @@ private: // Private formatted_image_base interface.
                         (
                             ::TIFFReadEncodedTile
                             (
-                                p_tiff_,
+                                &lib_object(),
                                 raw_tile_number,
                                 //buffer_iterator.at_c_dynamic( channel_tile ),
                                 &(*buffer_iterator)[ channel_tile ],
@@ -744,7 +872,7 @@ private: // Private formatted_image_base interface.
                         //unsigned int const this_tile_size_bytes ( last_row_tile ? setup.last_row_tile_size_bytes  : setup.tile_size_bytes  );
                         unsigned int const this_tile_width_bytes( last_row_tile ? setup.last_row_tile_width_bytes : setup.tile_width_bytes );
 
-                        result.accumulate_equal( ::TIFFReadEncodedTile( p_tiff_, current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
+                        result.accumulate_equal( ::TIFFReadEncodedTile( &lib_object(), current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
 
                         my_pixel_t const * p_source_pixel( gil_reinterpret_cast_c<my_pixel_t const *>( setup.p_tile_buffer.get() + ( current_plane_rows_to_skip * this_tile_width_bytes ) ) );
                         target_x_iterator  p_target_pixel( p_target.base() + horizontal_offset );
@@ -816,7 +944,7 @@ private: // Private formatted_image_base interface.
                     {
                         tdata_t const p_buffer( &(*buffer_iterator)[ plane ] );
                         skip_to_row( get_offset<offset_t>( view ), plane, p_buffer, result );
-                        result.accumulate_equal( ::TIFFReadScanline( p_tiff_, p_buffer, row, static_cast<tsample_t>( plane ) ), 1 );
+                        result.accumulate_equal( ::TIFFReadScanline( &lib_object(), p_buffer, row, static_cast<tsample_t>( plane ) ), 1 );
                     }
                     typename          MyView       ::x_iterator p_source_pixel( buffer_iterator );
                     typename original_target_view_t::x_iterator p_target_pixel( p_target.base() );
@@ -842,7 +970,7 @@ private: // Private formatted_image_base interface.
                     unsigned int const target_row( row + dimensions.y           );
                     while ( row != target_row )
                     {
-                        result.accumulate_equal( ::TIFFReadScanline( p_tiff_, scanline_buffer.begin(), row++, static_cast<tsample_t>( plane ) ), 1 );
+                        result.accumulate_equal( ::TIFFReadScanline( &lib_object(), scanline_buffer.begin(), row++, static_cast<tsample_t>( plane ) ), 1 );
                         my_pixel_t const * p_source_pixel( scanline_buffer.begin() );
                         target_x_iterator  p_target_pixel( p_target.base()         );
                         while ( p_source_pixel != scanline_buffer.end() )
@@ -859,7 +987,6 @@ private: // Private formatted_image_base interface.
 
         result.throw_if_error();
     }
-
 
 private:
     template <typename View>
@@ -955,8 +1082,8 @@ private:
     class scanline_buffer_t : noncopyable
     {
     public:
-        scanline_buffer_t( libtiff_image const & tiff, mpl::true_ /*      nptcc  */ ) : buffer_( planar_scanline_buffer_aux( tiff          ) ) {}
-        scanline_buffer_t( libtiff_image const & tiff, mpl::false_ /* not nptcc  */ ) : buffer_( scanline_buffer_aux       ( *tiff.p_tiff_ ) ) {} 
+        scanline_buffer_t( libtiff_image const & tiff, mpl::true_ /*      nptcc  */ ) : buffer_( planar_scanline_buffer_aux( tiff              ) ) {}
+        scanline_buffer_t( libtiff_image const & tiff, mpl::false_ /* not nptcc  */ ) : buffer_( scanline_buffer_aux       ( tiff.lib_object() ) ) {} 
 
         Pixel       * begin() const { return gil_reinterpret_cast  <Pixel       *>( buffer_.first.get() ); }
         Pixel const * end  () const { return gil_reinterpret_cast_c<Pixel const *>( buffer_.second      ); }
@@ -987,7 +1114,7 @@ private:
         cumulative_result &       error_result
     ) const
     {
-        BOOST_ASSERT( !::TIFFIsTiled( p_tiff_ ) );
+        BOOST_ASSERT( !::TIFFIsTiled( &lib_object() ) );
 
         skip_row_results_t result;
         result.rows_per_strip               = get_field<uint32>( TIFFTAG_ROWSPERSTRIP );
@@ -1008,17 +1135,15 @@ private:
         );
         while ( row < row_to_skip_to )
         {
-            error_result.accumulate_equal( ::TIFFReadScanline( p_tiff_, buffer, row++, static_cast<tsample_t>( sample ) ), 1 );
+            error_result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buffer, row++, static_cast<tsample_t>( sample ) ), 1 );
         }
 
-        //BOOST_ASSERT( !row_to_skip_to || ( ::TIFFCurrentRow( p_tiff_ ) == row_to_skip_to ) );
+        //BOOST_ASSERT( !row_to_skip_to || ( ::TIFFCurrentRow( &lib_object() ) == row_to_skip_to ) );
 
         return result;
     }
 
 private:
-    TIFF * /*const*/ p_tiff_;
-
     full_format_t format_;
 };
 
@@ -1027,13 +1152,9 @@ private:
 #endif
 
 
-
-
-//------------------------------------------------------------------------------
-} // namespace detail
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // libjpeg_private_base_hpp
+#endif // libtiff_image_hpp

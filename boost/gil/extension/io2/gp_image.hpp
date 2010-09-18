@@ -153,17 +153,6 @@ inline void verify_result( Gdiplus::GpStatus const result )
 }
 
 
-
-class gp_guard
-    :
-    gp_guard_base
-#if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_AUTO
-    ,gp_initialize_guard
-#endif
-{
-};
-
-
 class gp_roi : public Gdiplus::Rect
 {
 public:
@@ -183,6 +172,109 @@ public:
         : Gdiplus::Rect( Gdiplus::Point( top_left.x, top_left.y ), Gdiplus::Size( bottom_right.x - top_left.x, bottom_right.y - top_left.y ) ) {}
 };
 
+
+class gp_writer : public open_on_write_writer
+{
+public:
+    typedef std::pair<Gdiplus::GpBitmap *, Gdiplus::EncoderParameters *> lib_object_t;
+
+    // The passed View object must outlive the GpBitmap object (GDI+ uses lazy
+    // evaluation).
+    template <class View>
+    explicit gp_writer( View & view )
+    {
+        BOOST_STATIC_ASSERT( is_supported<view_gp_format::apply<View>::value>::value );
+
+        // http://msdn.microsoft.com/en-us/library/ms536315(VS.85).aspx
+        // stride has to be a multiple of 4 bytes
+        BOOST_ASSERT( !( view.pixels().row_size() % sizeof( Gdiplus::ARGB ) ) );
+
+        ensure_result
+        (
+            Gdiplus::DllExports::GdipCreateBitmapFromScan0
+            (
+                view.width (),
+                view.height(),
+                view.pixels().row_size(),
+                view_gp_format::apply<View>::value,
+                formatted_image_base::get_raw_data( view ),
+                &lib_object().first
+            )
+        );
+        BOOST_ASSERT( lib_object().first );
+    }
+
+    ~gp_writer()
+    {
+        detail::verify_result( Gdiplus::DllExports::GdipDisposeImage( lib_object().first ) );
+    }
+
+    template <typename Target>
+    void write_default( Target const & target )
+    {
+        BOOST_ASSERT( lib_object().second == NULL );
+        write( target );
+    }
+
+    void write( char    const * const pFilename, CLSID const & encoderID = jpg_codec() ) const
+    {
+        write( detail::wide_path( pFilename ), encoderID );
+    }
+
+    void write( wchar_t const * const pFilename, CLSID const & encoderID = jpg_codec() ) const
+    {
+        save_to( pFilename, encoderID );
+    }
+
+    lib_object_t       & lib_object()       { return lib_instance_; }
+    lib_object_t const & lib_object() const { return lib_instance_; }
+
+private:
+    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
+    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
+
+    void save_to( char    const * const pFilename, CLSID const & encoderID ) const { save_to( detail::wide_path( pFilename ), encoderID ); }
+    void save_to( wchar_t const * const pFilename, CLSID const & encoderID ) const
+    {
+        detail::ensure_result( Gdiplus::DllExports::GdipSaveImageToFile( lib_object().first, pFilename, &encoderID, lib_object().second ) );
+    }
+
+    static CLSID const & png_codec()
+    {
+        static CLSID const clsid = { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & jpg_codec()
+    {
+        static CLSID const clsid = { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & tiff_codec()
+    {
+        static CLSID const clsid = { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & gif_codec()
+    {
+        static CLSID const clsid = { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+    static CLSID const & bmp_codec()
+    {
+        static CLSID const clsid = { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
+        return clsid;
+    }
+
+private:
+    lib_object_t lib_instance_;
+};
+
+
+class gp_view_base;
+
+//------------------------------------------------------------------------------
+} // namespace detail
+
 class gp_image;
 
 template <>
@@ -190,53 +282,78 @@ struct formatted_image_traits<gp_image>
 {
     typedef Gdiplus::PixelFormat format_t;
 
-    typedef gp_supported_pixel_formats supported_pixel_formats_t;
+    typedef detail::gp_supported_pixel_formats supported_pixel_formats_t;
 
-    typedef gp_roi roi_t;
+    typedef detail::gp_roi roi_t;
 
-    typedef view_gp_format view_to_native_format;
+    typedef detail::view_gp_format view_to_native_format;
 
     template <class View>
-    struct is_supported : detail::is_supported<view_gp_format::apply<View>::value> {};
+    struct is_supported : detail::is_supported<view_to_native_format::apply<View>::value> {};
 
-    struct view_data_t : public Gdiplus::BitmapData
+    typedef mpl::map5
+        <
+            mpl::pair<char                    const *,                                                    gp_image  >,
+            mpl::pair<wchar_t                 const *,                                                    gp_image  >,
+            mpl::pair<IStream                       &,                                                    gp_image  >,
+            mpl::pair<FILE                          &, detail::input_FILE_for_IStream_extender           <gp_image> >,
+            mpl::pair<writable_memory_chunk_t const &, detail::writable_memory_chunk_for_IStream_extender<gp_image> >
+        > readers;
+
+    typedef mpl::map5
+        <
+            mpl::pair<char           const *, detail::gp_writer>,
+            mpl::pair<wchar_t        const *, detail::gp_writer>,
+            mpl::pair<IStream              &, detail::gp_writer>,
+            mpl::pair<FILE                 &, detail::gp_writer>,
+            mpl::pair<memory_chunk_t const &, detail::gp_writer>
+        > writers;
+
+    class view_data_t : public Gdiplus::BitmapData
     {
+    public:
         template <typename View>
         view_data_t( View const & view ) : p_roi_( 0 ) { set_bitmapdata_for_view( view ); }
 
         template <typename View>
-        view_data_t( View const & view, gp_roi::offset_t const & offset )
+        view_data_t( View const & view, roi_t::offset_t const & offset )
             :
-            p_roi_( static_cast<gp_roi const *>( optional_roi_.address() ) )
+            p_roi_( static_cast<roi_t const *>( optional_roi_.address() ) )
         {
             set_bitmapdata_for_view( view );
-            new ( optional_roi_.address() ) gp_roi( offset, Width, Height );
+            new ( optional_roi_.address() ) roi_t( offset, Width, Height );
         }
 
         void set_format( format_t const format ) { PixelFormat = format; }
 
+    public:
         Gdiplus::Rect const * const p_roi_;
 
     private:
         template <typename View>
         void set_bitmapdata_for_view( View const & view )
         {
+            BOOST_STATIC_ASSERT( is_supported<View>::value );
+
             Width       = view.width();
             Height      = view.height();
             Stride      = view.pixels().row_size();
-            PixelFormat = view_gp_format::apply<View>::value;
-            Scan0       = formatted_image_base::get_raw_data( view );
+            PixelFormat = view_to_native_format::apply<View>::value;
+            Scan0       = detail::formatted_image_base::get_raw_data( view );
             Reserved    = 0;
         }
 
         void operator=( view_data_t const & );
 
     private:
-        aligned_storage<sizeof( gp_roi ), alignment_of<gp_roi>::value>::type optional_roi_;
+        aligned_storage<sizeof( roi_t ), alignment_of<roi_t>::value>::type optional_roi_;
     };
+
+    typedef view_data_t writer_view_data_t;
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( Gdiplus::ARGB ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true                    );
+    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = true             );
 };
 
 
@@ -247,19 +364,22 @@ struct formatted_image_traits<gp_image>
 
 class gp_image
     :
-    private gp_guard,
+    private detail::gp_guard,
     public  detail::formatted_image<gp_image>
 {
+public:
+    typedef detail::gp_user_guard guard;
+
 public: /// \ingroup Construction
     explicit gp_image( wchar_t const * const filename )
     {
-        ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( filename, &pBitmap_ ) );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( filename, &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
     explicit gp_image( char const * const filename )
     {
-        ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( wide_path( filename ), &pBitmap_ ) );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( detail::wide_path( filename ), &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
@@ -267,37 +387,13 @@ public: /// \ingroup Construction
     // lazy evaluation).
     explicit gp_image( IStream & stream )
     {
-        ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStreamICM( &stream, &pBitmap_ ) );
-        BOOST_ASSERT( pBitmap_ );
-    }
-
-    // The passed View object must outlive the GpBitmap object (GDI+ uses lazy
-    // evaluation).
-    template <class View>
-    explicit gp_image( View & view )
-    {
-        // http://msdn.microsoft.com/en-us/library/ms536315(VS.85).aspx
-        // stride has to be a multiple of 4 bytes
-        BOOST_ASSERT( !( view.pixels().row_size() % sizeof( Gdiplus::ARGB ) ) );
-
-        ensure_result
-        (
-            Gdiplus::DllExports::GdipCreateBitmapFromScan0
-            (
-                view.width(),
-                view.height(),
-                view.pixels().row_size(),
-                view_gp_format::apply<View>::value,
-                get_raw_data( view ),
-                &pBitmap_
-            )
-        );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStreamICM( &stream, &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
     ~gp_image()
     {
-        verify_result( Gdiplus::DllExports::GdipDisposeImage( pBitmap_ ) );
+        detail::verify_result( Gdiplus::DllExports::GdipDisposeImage( pBitmap_ ) );
     }
 
 public:
@@ -305,7 +401,7 @@ public:
     {
         using namespace Gdiplus;
         REAL width, height;
-        verify_result( DllExports::GdipGetImageDimension( const_cast<GpBitmap *>( pBitmap_ ), &width, &height ) );
+        detail::verify_result( DllExports::GdipGetImageDimension( const_cast<GpBitmap *>( pBitmap_ ), &width, &height ) );
         return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
     }
 
@@ -313,9 +409,6 @@ public:
     {
         return Gdiplus::GetPixelFormatSize( format );
     }
-
-    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
-    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
 
     ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
     ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
@@ -326,7 +419,7 @@ private: // Private formatted_image_base interface.
     format_t format() const
     {
         format_t pixel_format;
-        verify_result( Gdiplus::DllExports::GdipGetImagePixelFormat( pBitmap_, &pixel_format ) );
+        detail::verify_result( Gdiplus::DllExports::GdipGetImagePixelFormat( pBitmap_, &pixel_format ) );
         return pixel_format;
     }
 
@@ -432,10 +525,11 @@ private:
         verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &bitmapData ) );
     }
 
-    void raw_convert_to_prepared_view( formatted_image_traits<gp_image>::view_data_t const & view_data ) const
+    void raw_convert_to_prepared_view( view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.Scan0 );
 
+        using namespace detail ;
         using namespace Gdiplus;
 
         BitmapData * const pMutableBitmapData( const_cast<BitmapData *>( static_cast<BitmapData const *>( &view_data ) ) );
@@ -456,7 +550,7 @@ private:
     }
 
 
-    void copy_to_target( formatted_image_traits<gp_image>::view_data_t const & view_data ) const
+    void raw_copy_to_prepared_view( view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.Width       == static_cast<UINT>( dimensions().x ) );
         BOOST_ASSERT( view_data.Height      == static_cast<UINT>( dimensions().y ) );
@@ -468,33 +562,6 @@ private:
     }
 
 private:
-    static CLSID const & png_codec()
-    {
-        static CLSID const clsid = { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & jpg_codec()
-    {
-        static CLSID const clsid = { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & tiff_codec()
-    {
-        static CLSID const clsid = { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & gif_codec()
-    {
-        static CLSID const clsid = { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & bmp_codec()
-    {
-        static CLSID const clsid = { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-
-
     template <Gdiplus::PixelFormat desired_format>
     void pre_palettized_conversion( mpl::true_ /*is_indexed*/ )
     {
@@ -549,14 +616,8 @@ private:
     template <Gdiplus::PixelFormat desired_format>
     void pre_palettized_conversion( mpl::false_ /*not is_indexed*/ ) const {}
 
-    void save_to( char    const * const pFilename, CLSID const & encoderID ) const { save_to( wide_path( pFilename ), encoderID ); }
-    void save_to( wchar_t const * const pFilename, CLSID const & encoderID ) const
-    {
-        ensure_result( Gdiplus::DllExports::GdipSaveImageToFile( pBitmap_, pFilename, &encoderID, NULL ) );
-    }
-
 private:
-    friend class gp_view_base;
+    friend class detail::gp_view_base;
 
     Gdiplus::GpBitmap * /*const*/ pBitmap_;
 };
@@ -565,7 +626,9 @@ private:
 #   pragma warning( pop )
 #endif
 
-
+namespace detail
+{
+//------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -588,7 +651,7 @@ protected:
     {
         std::memset( &bitmapData_, 0, sizeof( bitmapData_ ) );
 
-        ensure_result
+        detail::ensure_result
         (
             Gdiplus::DllExports::GdipBitmapLockBits
             (
@@ -658,41 +721,6 @@ public:
 //inline
 //typename formatted_image<Impl, SupportedPixelFormats, ROI>::view_t
 //view( formatted_image<Impl, SupportedPixelFormats, ROI> & img );// { return img._view; }
-
-
-#pragma warning( push )
-#pragma warning( disable : 4355 ) // 'this' used in base member initializer list.
-
-class __declspec( novtable ) gp_memory_image sealed
-    :
-    private MemoryReadStream,
-    public  gp_image
-{
-public:
-    gp_memory_image( memory_chunk_t const & in_memory_image )
-        :
-        MemoryReadStream( in_memory_image                 ),
-        gp_image        ( static_cast<IStream &>( *this ) )
-    {
-    }
-};
-
-class __declspec( novtable ) gp_FILE_image sealed
-    :
-    private FileReadStream,
-    public  gp_image
-{
-public:
-    explicit gp_FILE_image( FILE * const pFile )
-        :
-        FileReadStream( *pFile                          ),
-        gp_image      ( static_cast<IStream &>( *this ) )
-    {
-    }
-};
-
-#pragma warning( pop )
-
 
 //------------------------------------------------------------------------------
 } // namespace detail

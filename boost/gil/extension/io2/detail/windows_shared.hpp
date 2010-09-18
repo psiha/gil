@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// \file windows_shared.hpp
-/// ----------------------------
+/// ------------------------
 ///
 ///   Common functionality for MS Windows based backends.
 ///
@@ -18,6 +18,8 @@
 #ifndef windows_shared_hpp__9337A434_D2F6_43F2_93C8_4CE66C07B74D
 #define windows_shared_hpp__9337A434_D2F6_43F2_93C8_4CE66C07B74D
 //------------------------------------------------------------------------------
+#include "shared.hpp"
+
 #include "boost/array.hpp"
 #include "boost/assert.hpp"
 
@@ -70,6 +72,102 @@ private:
     boost::array<wchar_t, MAX_PATH> wideFileName_;
 };
 
+
+#pragma warning( push )
+#pragma warning( disable : 4355 ) // 'this' used in base member initializer list.
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class input_FILE_for_IStream_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from IStream objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class IStream_capable_class>
+class __declspec( novtable ) input_FILE_for_IStream_extender
+    :
+    private FileReadStream,
+    public  IStream_capable_class
+{
+public:
+    input_FILE_for_IStream_extender( FILE & file )
+        :
+        FileReadStream       ( file                            ),
+        IStream_capable_class( static_cast<IStream &>( *this ) )
+    {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class output_FILE_for_IStream_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from IStream objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class IStream_capable_class>
+class __declspec( novtable ) output_FILE_for_IStream_extender
+    :
+    private FileWriteStream,
+    public  IStream_capable_class
+{
+public:
+    output_FILE_for_IStream_extender( FILE & file )
+        :
+        FileWriteStream      ( file                            ),
+        IStream_capable_class( static_cast<IStream &>( *this ) )
+    {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class memory_chunk_for_IStream_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from IStream objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class IStream_capable_class>
+class __declspec( novtable ) memory_chunk_for_IStream_extender
+    :
+    private MemoryReadStream,
+    public  IStream_capable_class
+{
+public:
+    memory_chunk_for_IStream_extender( memory_chunk_t const & in_memory_image )
+        :
+        MemoryReadStream     ( in_memory_image                 ),
+        IStream_capable_class( static_cast<IStream &>( *this ) )
+    {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class writable_memory_chunk_for_IStream_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from IStream objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class IStream_capable_class>
+class __declspec( novtable ) writable_memory_chunk_for_IStream_extender
+    :
+    private MemoryWriteStream,
+    public  IStream_capable_class
+{
+public:
+    writable_memory_chunk_for_IStream_extender( writable_memory_chunk_t const & in_memory_image )
+        :
+        MemoryWriteStream     ( in_memory_image                ),
+        IStream_capable_class( static_cast<IStream &>( *this ) )
+    {}
+};
+
+#pragma warning( pop )
 
 //------------------------------------------------------------------------------
 } // namespace detail

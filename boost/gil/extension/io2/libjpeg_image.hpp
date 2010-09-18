@@ -178,7 +178,7 @@ private:
         fatal_error_handler( p_cinfo );
     }
 
-    static void __cdecl output_message( j_common_ptr /*p_cinfo*/ ) {}
+    static void __cdecl output_message( j_common_ptr /*p_cinfo*/                    ) {}
     static void __cdecl emit_message  ( j_common_ptr /*p_cinfo*/, int /*msg_level*/ ) {}
     static void __cdecl format_message( j_common_ptr /*p_cinfo*/, char * /*buffer*/ ) {}
 
@@ -197,8 +197,6 @@ private:
     jpeg_error_mgr jerr_ ;
 };
 
-
-class libjpeg_image;
 
 struct decompression_setup_data_t
 {
@@ -225,7 +223,9 @@ struct view_data_t : decompression_setup_data_t
         width_ ( view.width ()            ),
         stride_( view.pixels().row_size() ),
         number_of_channels_( num_channels<View>::value )
-    {}
+    {
+        BOOST_STATIC_ASSERT( view_libjpeg_format::apply<View>::value != JCS_UNKNOWN );
+    }
 
     void set_format( J_COLOR_SPACE const format ) { format_ = format; }
 
@@ -236,7 +236,7 @@ struct view_data_t : decompression_setup_data_t
 };
 
 
-class libjpeg_writer : public libjpeg_base
+class libjpeg_writer : private libjpeg_base, public configure_on_write_writer
 {
 public:
     explicit libjpeg_writer( char const * const p_target_file_name )
@@ -244,6 +244,13 @@ public:
         libjpeg_base( for_compressor() )
     {
         setup_destination( p_target_file_name );
+    }
+
+    explicit libjpeg_writer( FILE & file )
+        :
+        libjpeg_base( for_compressor() )
+    {
+        setup_destination( file );
     }
 
     ~libjpeg_writer()
@@ -254,39 +261,53 @@ public:
     jpeg_compress_struct       & lib_object()       { return compressor(); }
     jpeg_compress_struct const & lib_object() const { return const_cast<libjpeg_writer &>( *this ).lib_object(); }
 
-    static void write( view_data_t const & view, char const * const p_target_file_name )
+    void write_default( view_data_t const & view ) throw(...)
+    {
+        setup_compression( view );
+
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        jpeg_set_defaults( &compressor() );
+        //jpeg_set_quality( &compressor(), 100, false );
+
+        do_write( view );
+    }
+
+    void write( view_data_t const & view )
+    {
+        setup_compression( view );
+        do_write         ( view );
+    }
+
+private:
+    void setup_compression( view_data_t const & view )
+    {
+        compressor().image_width      = static_cast<JDIMENSION>( view.width_  );
+        compressor().image_height     = static_cast<JDIMENSION>( view.height_ );
+        compressor().input_components = view.number_of_channels_;
+        compressor().in_color_space   = view.format_;
+    }
+
+    void do_write( view_data_t const & view ) throw(...)
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
-
-        libjpeg_writer writer( p_target_file_name );
 
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
             if ( setjmp( error_handler_target() ) )
                 throw_jpeg_error();
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         
-        writer.compressor().image_width  = static_cast<JDIMENSION>( view.width_  );
-        writer.compressor().image_height = static_cast<JDIMENSION>( view.height_ );
-        writer.compressor().input_components = view.number_of_channels_;
-        writer.compressor().in_color_space   = view.format_;
-
-        writer.setup_compression();
+        jpeg_start_compress( &compressor(), false );
 
         JSAMPLE *       p_row( view.buffer_ );
         JSAMPLE * const p_end( memunit_advanced( view.buffer_, view.height_ * view.stride_ ) );
         while ( p_row < p_end )
         {
-            writer.write_row( p_row );
+            write_row( p_row );
             memunit_advance( p_row, view.stride_ );
         }
-    }
-
-private:
-    void setup_compression() BOOST_GIL_CAN_THROW
-    {
-        jpeg_set_defaults  ( &compressor()             );
-        //jpeg_set_quality   ( &compressor(), 100, false );
-        jpeg_start_compress( &compressor(),      false );
     }
 
     void write_row( JSAMPLE * p_row ) BOOST_GIL_CAN_THROW
@@ -381,28 +402,47 @@ private:
     jpeg_destination_mgr       destination_manager_;
     array<unsigned char, 4096> write_buffer_       ;
 };
+//------------------------------------------------------------------------------
+} // namespace detail
 
+
+class libjpeg_image;
 
 template <>
 struct formatted_image_traits<libjpeg_image>
 {
-    typedef J_COLOR_SPACE                   format_t;
-    typedef libjpeg_supported_pixel_formats supported_pixel_formats_t;
-    typedef libjpeg_roi                     roi_t;
-    typedef view_libjpeg_format             view_to_native_format;
-    typedef view_data_t                     view_data_t;
+    typedef       ::J_COLOR_SPACE                   format_t;
+    typedef detail::libjpeg_supported_pixel_formats supported_pixel_formats_t;
+    typedef detail::libjpeg_roi                     roi_t;
+    typedef detail::view_libjpeg_format             view_to_native_format;
+    typedef detail::view_data_t                     view_data_t;
 
     template <class View>
-    struct is_supported : mpl::bool_<view_libjpeg_format::apply<View>::value != JCS_UNKNOWN> {};
+    struct is_supported : mpl::bool_<view_to_native_format::apply<View>::value != JCS_UNKNOWN> {};
+
+    typedef mpl::map2
+            <
+                mpl::pair<FILE       &, libjpeg_image>,
+                mpl::pair<char const *, libjpeg_image>
+            > readers;
+
+    typedef mpl::map2
+            <
+                mpl::pair<FILE       &, detail::libjpeg_writer>,
+                mpl::pair<char const *, detail::libjpeg_writer>
+            > writers;
+
+    typedef view_data_t writer_view_data_t;
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
+    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = false     );
 };
 
 
 class libjpeg_image
     :
-    public  libjpeg_base,
+    public  detail::libjpeg_base,
     public  detail::formatted_image<libjpeg_image>
 {
 public:
@@ -527,7 +567,7 @@ public:
 
 private: // Private formatted_image_base interface.
     friend base_t;
-    void raw_convert_to_prepared_view( view_data_t const & view_data ) const throw(...)
+    void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const throw(...)
     {
         setup_decompression( view_data );
 
@@ -612,7 +652,7 @@ private: // Private formatted_image_base interface.
         }
     }
 
-    void raw_copy_to_prepared_view( view_data_t const & view_data ) const
+    void raw_copy_to_prepared_view( detail::view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.width_  == static_cast<unsigned int>( dimensions().x ) );
         BOOST_ASSERT( view_data.height_ == static_cast<unsigned int>( dimensions().y ) );
@@ -621,7 +661,7 @@ private: // Private formatted_image_base interface.
     }
 
 private:
-    void setup_decompression( decompression_setup_data_t const & view_data ) const throw(...)
+    void setup_decompression( detail::decompression_setup_data_t const & view_data ) const throw(...)
     {
         unsigned int const state       ( decompressor().global_state );
         unsigned int       rows_to_skip( view_data.offset_           );
@@ -741,7 +781,7 @@ private:
     {
         BOOST_VERIFY( jpeg_read_header( &decompressor(), true ) == JPEG_HEADER_OK );
 
-        io_error_if( decompressor().data_precision != 8, "Unsupported image file data precision." );
+        detail::io_error_if( decompressor().data_precision != 8, "Unsupported image file data precision." );
     }
 
     // Unextracted "libjpeg_reader" interface.
@@ -913,9 +953,6 @@ private:
 //    {}
 //};
 
-
-//------------------------------------------------------------------------------
-} // namespace detail
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

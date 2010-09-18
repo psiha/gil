@@ -35,10 +35,6 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
-
-class libpng_image;
-class libpng_image_from_char;
-
 namespace detail
 {
 //------------------------------------------------------------------------------
@@ -54,12 +50,15 @@ template <> struct gil_to_libpng_format<rgba16_pixel_t, false> : mpl::integral_c
 template <> struct gil_to_libpng_format<gray16_pixel_t, false> : mpl::integral_c<int, PNG_COLOR_TYPE_GRAY      | ( 16 << 16 )> {};
 
 
-
 struct view_libpng_format
 {
     template <class View>
     struct apply : gil_to_libpng_format<typename View::value_type, is_planar<View>::value> {};
 };
+
+
+template <class View>
+struct is_view_supported : mpl::bool_<view_libpng_format::apply<View>::value != -1> {};
 
 
 typedef mpl::vector6
@@ -78,6 +77,8 @@ typedef generic_vertical_roi libpng_roi;
 
 struct libpng_view_data_t
 {
+    typedef unsigned int format_t;
+
     template <class View>
     /*explicit*/ libpng_view_data_t( View const & view, libpng_roi::offset_t const offset = 0 )
         :
@@ -88,14 +89,16 @@ struct libpng_view_data_t
         width_ ( view.width ()            ),
         stride_( view.pixels().row_size() ),
         number_of_channels_( num_channels<View>::value )
-    {}
+    {
+        BOOST_STATIC_ASSERT( is_view_supported<View>::value );
+    }
 
     void set_format( unsigned int const format ) { format_ = format; }
 
-    unsigned int          /*const*/ format_;
-    unsigned int          /*const*/ colour_type_;
-    unsigned int bits_per_pixel_;
-    png_byte *              /*const*/ buffer_;
+    format_t             /*const*/ format_;
+    unsigned int         /*const*/ colour_type_;
+    unsigned int         /*const*/ bits_per_pixel_;
+    png_byte *           /*const*/ buffer_;
     libpng_roi::offset_t /*const*/ offset_;
 
     unsigned int /*const*/ height_;
@@ -105,38 +108,26 @@ struct libpng_view_data_t
 };
 
 
-template <>
-struct formatted_image_traits<libpng_image>
-{
-    typedef int                            format_t;
-    typedef libpng_supported_pixel_formats supported_pixel_formats_t;
-    typedef libpng_roi                     roi_t;
-    typedef view_libpng_format             view_to_native_format;
-    typedef libpng_view_data_t             view_data_t;
-
-    template <class View>
-    struct is_supported : mpl::bool_<view_libpng_format::apply<View>::value != -1> {};
-
-    typedef mpl::map2
-            <
-                mpl::pair<FILE       &, libpng_image          >,
-                mpl::pair<char const *, libpng_image_from_char>
-            > readers;
-
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
-    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-};
-
-
-
 inline void throw_libpng_error()
 {
-    boost::gil::detail::io_error( "LibPNG failure" );
+    io_error( "LibPNG failure" );
 }
 
 
-inline void PNGAPI png_error_function( png_structp const png_ptr, png_const_charp const /*error_message*/ )
+inline void PNGAPI png_warning_function( png_structp /*png_ptr*/, png_const_charp const message )
 {
+    #ifdef _DEBUG
+        std::puts( message );
+    #else
+        ignore_unused_variable_warning( message );
+    #endif // _DEBUG
+}
+
+
+inline void PNGAPI png_error_function( png_structp const png_ptr, png_const_charp const error_message )
+{
+    png_warning_function( png_ptr, error_message );
+
     #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         throw_libpng_error();
         boost::ignore_unused_variable_warning( png_ptr );
@@ -145,10 +136,6 @@ inline void PNGAPI png_error_function( png_structp const png_ptr, png_const_char
     #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 }
 
-
-inline void PNGAPI png_warning_function( png_structp, png_const_charp )
-{
-}
 
 //...zzz...this will blow-up at link-time when included in multiple .cpps unless it gets moved into a separate module...
 #ifdef PNG_NO_ERROR_TEXT
@@ -174,13 +161,266 @@ inline void PNGAPI png_warning_function( png_structp, png_const_charp )
         png_warning_function( png_ptr, error_message );
     }
 #endif // PNG_NO_WARNINGS
+
+
+class lib_object_t : noncopyable
+{
+public:
+    png_struct & png_object() const
+    {
+        BOOST_ASSERT( p_png_ && "Call this only after ensuring creation success!" );
+        png_struct & png( *p_png_ );
+        __assume( &png != 0 );
+        return png;
+    }
+
+    png_info & info_object() const
+    {
+        BOOST_ASSERT( p_png_ && "Call this only after ensuring creation success!" );
+        png_info & info( *p_info_ );
+        __assume( &info != 0 );
+        return info;
+    }
+
+protected:
+    lib_object_t( png_struct * const p_png, png_info  * const p_info )
+        :
+        p_png_ ( p_png  ),
+        p_info_( p_info )
+    {}
+
+    ~lib_object_t()
+    {
+        BOOST_ASSERT( !p_png_ && !p_info_ && "The concrete class must do the cleanup!" );
+    }
+
+    //...zzz...forced by LibPNG into either duplication or this anti-pattern...
+    bool is_valid() const { return p_png_ && p_info_; }
+
+    png_struct * & png_object_for_destruction () { return p_png_ ; }
+    png_info   * & info_object_for_destruction() { return p_info_; }
+
+private:
+    png_struct * __restrict p_png_ ;
+    png_info   * __restrict p_info_;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class libpng_base
+///
+/// \brief
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class libpng_base : public lib_object_t
+{
+public:
+    typedef lib_object_t lib_object_t;
+
+    lib_object_t & lib_object() { return *this; }
+
+protected:
+    libpng_base( png_struct * const p_png )
+        :
+        lib_object_t( p_png, ::png_create_info_struct( p_png ) )
+    {}
+
+    bool successful_creation() const { return is_valid(); }
+
+    static std::size_t format_bit_depth( libpng_view_data_t::format_t const format )
+    {
+        return ( format >> 16 ) & 0xFF;
+    }
+
+    static std::size_t format_colour_type( libpng_view_data_t::format_t const format )
+    {
+        return format & 0xFF;
+    }
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class libpng_writer
+///
+/// \brief
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class libpng_writer : public libpng_base, public configure_on_write_writer
+{
+public:
+    void write_default( libpng_view_data_t const & view )
+    {
+        ::png_set_IHDR
+        (
+            &png_object ()                    ,
+            &info_object()                    ,
+            view.width_                       ,
+            view.height_                      ,
+            format_bit_depth  ( view.format_ ),
+            format_colour_type( view.format_ ),
+            PNG_INTERLACE_NONE                ,
+            PNG_COMPRESSION_TYPE_DEFAULT      ,
+            PNG_INTRAPIXEL_DIFFERENCING
+        );
+
+        //::png_set_invert_alpha( &png_object() );
+
+        write( view );
+    }
+
+    void write( libpng_view_data_t const & view ) throw(...)
+    {
+        BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
+
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+
+        if ( little_endian() )
+            ::png_set_swap( &png_object() );
+
+        ::png_write_info( &png_object(), &info_object() );
+        
+        png_byte *       p_row( view.buffer_ );
+        png_byte * const p_end( memunit_advanced( view.buffer_, view.height_ * view.stride_ ) );
+        while ( p_row < p_end )
+        {
+            ::png_write_row( &png_object(), p_row );
+            memunit_advance( p_row, view.stride_ );
+        }
+
+        ::png_write_end( &png_object(), 0 );
+    }
+
+protected:
+    libpng_writer( void * const p_target_object, png_rw_ptr const write_data_fn, png_flush_ptr const output_flush_fn )
+        :
+        libpng_base( ::png_create_write_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
+    {
+        if ( !successful_creation() )
+            cleanup_and_throw_libpng_error();
+
+        setup_destination( p_target_object, write_data_fn, output_flush_fn );
+    }
+
+    ~libpng_writer()
+    {
+        destroy_write_struct();
+    }
+
+private:
+    void destroy_write_struct() { ::png_destroy_write_struct( &png_object_for_destruction(), &info_object_for_destruction() ); }
+
+    void cleanup_and_throw_libpng_error()
+    {
+        destroy_write_struct();
+        detail::throw_libpng_error();
+    }
+
+    void setup_destination( void * const p_target_object, png_rw_ptr const write_data_fn, png_flush_ptr const output_flush_fn )
+    {
+        ::png_set_write_fn( &png_object(), p_target_object, write_data_fn, output_flush_fn );
+    }
+
+private:
+    jpeg_destination_mgr       destination_manager_;
+    array<unsigned char, 4096> write_buffer_       ;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class libpng_writer_FILE
+///
+/// \brief
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class libpng_writer_FILE : public libpng_writer
+{
+public:
+    libpng_writer_FILE( FILE & file )
+        :
+        libpng_writer( &file, &png_write_data, &png_flush_data )
+    {}
+
+private:
+    static void PNGAPI png_write_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
+    {
+        BOOST_ASSERT( png_ptr );
+
+        png_size_t const written_size
+        (
+            static_cast<png_size_t>( std::fwrite( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
+        );
+
+        if ( written_size != length )
+            png_error_function( png_ptr, "Write Error" );
+    }
+
+    static void PNGAPI png_flush_data( png_structp const png_ptr )
+    {
+        BOOST_ASSERT( png_ptr );
+
+        std::fflush( static_cast<FILE *>( png_ptr->io_ptr ) );
+    }
+};
+
 //------------------------------------------------------------------------------
 } // namespace detail
 
 
+class libpng_image;
+
+template <>
+struct formatted_image_traits<libpng_image>
+{
+    typedef         int                            format_t;
+    typedef detail::libpng_supported_pixel_formats supported_pixel_formats_t;
+    typedef detail::libpng_roi                     roi_t;
+    typedef detail::view_libpng_format             view_to_native_format;
+    typedef detail::libpng_view_data_t             view_data_t;
+
+    template <class View>
+    struct is_supported : detail::is_view_supported<View> {};
+
+    typedef mpl::map2
+            <
+                mpl::pair<FILE       &,                                   libpng_image  >,
+                mpl::pair<char const *, detail::input_c_str_for_c_file_extender<libpng_image> >
+            > readers;
+
+    typedef mpl::map2
+            <
+                mpl::pair<FILE       &,                                   detail::libpng_writer_FILE  >,
+                mpl::pair<char const *, detail::output_c_str_for_c_file_extender<detail::libpng_writer_FILE> >
+            > writers;
+
+    typedef view_data_t writer_view_data_t;
+
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
+    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
+    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = false     );
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class libpng_image
+///
+/// \brief
+///
+////////////////////////////////////////////////////////////////////////////////
+
 class libpng_image
     :
-    public detail::formatted_image<libpng_image>
+    public  detail::formatted_image<libpng_image>,
+    private detail::libpng_base
 {
 public:
     struct guard {};
@@ -227,7 +467,7 @@ public:
 
     std::size_t format_size( format_t const format ) const
     {
-        return number_of_channels() * ( ( format >> 16 ) & 0xFF ) / 8;
+        return number_of_channels() * format_bit_depth( format ) / 8;
     }
 
     std::size_t format_size() const
@@ -235,44 +475,12 @@ public:
         return number_of_channels() * bit_depth() / 8;
     }
 
-private:
-    static void PNGAPI png_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
-    {
-        BOOST_ASSERT( png_ptr );
-
-        png_size_t const read_size
-        (
-            static_cast<png_size_t>( std::fread( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
-        );
-
-        if ( read_size != length )
-            detail::png_error_function( png_ptr, "Read Error" );
-    }
-
-    static void PNGAPI png_write_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
-    {
-        BOOST_ASSERT( png_ptr );
-
-        png_size_t const written_size
-        (
-            static_cast<png_size_t>( std::fwrite( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
-        );
-
-        if ( written_size != length )
-            detail::png_error_function( png_ptr, "Write Error" );
-    }
-
-    //static void png_flush_data( png_structp const png_ptr);
-
 public: /// \ingroup Construction
     explicit libpng_image( FILE & file )
         :
-        p_png_ ( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) ),
-        p_info_( ::png_create_info_struct  ( p_png_                                                                                                    ) )
+        libpng_base( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
     {
-        /// \todo Replace this manual logic with proper RAII guards.
-        ///                                   (03.09.2010.) (Domagoj Saric)
-        if ( !p_png_ || !p_info_ )
+        if ( !successful_creation() )
             cleanup_and_throw_libpng_error();
 
         #ifdef PNG_NO_STDIO
@@ -280,15 +488,12 @@ public: /// \ingroup Construction
         #else
             ::png_init_io( &png_object(), &file );
         #endif
-        //..zzz...png_set_write_fn(png_structp write_ptr, voidp write_io_ptr, png_rw_ptr write_data_fn, png_flush_ptr output_flush_fn);
 
         init();
     }
 
     ~libpng_image()
     {
-        __assume( p_png_  != 0 );
-        __assume( p_info_ != 0 );
         destroy_read_struct();
     }
 
@@ -346,7 +551,7 @@ private: // Private formatted_image_base interface.
         }
     }
 
-    void raw_convert_to_prepared_view( detail::libpng_view_data_t const & view_data ) const throw(...)
+    void raw_convert_to_prepared_view( detail::libpng_view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.width_  == static_cast<unsigned int>( dimensions().x ) );
         BOOST_ASSERT( view_data.height_ == static_cast<unsigned int>( dimensions().y ) );
@@ -412,7 +617,7 @@ private: // Private formatted_image_base interface.
 
         while ( number_of_passes-- )
         {
-            png_byte       *       p_row( view_data.buffer_ );
+            png_byte       *       p_row( view_data.buffer_                                 );
             png_byte const * const p_end( p_row + ( view_data.height_ * view_data.stride_ ) );
             while ( p_row < p_end )
             {
@@ -449,7 +654,7 @@ private:
 
         #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
             }
-            catch(...)
+            catch (...)
             {
                 destroy_read_struct();
                 throw;
@@ -468,48 +673,27 @@ private:
     unsigned int number_of_channels() const { return ::png_get_channels ( &png_object(), &info_object() ); }
     std::size_t  bit_depth         () const { return ::png_get_bit_depth( &png_object(), &info_object() ); }
 
-    void destroy_read_struct() { ::png_destroy_read_struct( &p_png_, &p_info_, NULL ); }
+    void destroy_read_struct() { ::png_destroy_read_struct( &png_object_for_destruction(), &info_object_for_destruction(), NULL ); }
 
-    void read_row( png_byte * const p_row ) const
-    #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        throw(...)
-    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    void read_row( png_byte * const p_row ) const BOOST_GIL_CAN_THROW
     {
         ::png_read_row( &png_object(), p_row, NULL );
     }
 
-    png_struct & png_object() const
+    static void PNGAPI png_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
     {
-        png_struct & png( *p_png_ );
-        __assume( &png != 0 );
-        return png;
-    }
+        BOOST_ASSERT( png_ptr );
 
-    png_info & info_object() const
-    {
-        png_info & info( *p_info_ );
-        __assume( &info != 0 );
-        return info;
-    }
+        png_size_t const read_size
+        (
+            static_cast<png_size_t>( std::fread( data, 1, length, static_cast<FILE *>( png_ptr->io_ptr ) ) )
+        );
 
-private:
-    png_struct * __restrict /*const*/ p_png_ ;
-    png_info   * __restrict /*const*/ p_info_;
+        if ( read_size != length )
+            detail::png_error_function( png_ptr, "Read Error" );
+    }
 };
 
-
-class libpng_image_from_char
-    :
-    private detail::c_file_guard,
-    public  libpng_image
-{
-public:
-    libpng_image_from_char( char const * const file_name )
-        :
-        detail::c_file_guard( file_name ),
-        libpng_image        ( get()     )
-    {}
-};
 
 //------------------------------------------------------------------------------
 } // namespace gil
