@@ -141,6 +141,7 @@ inline void verify_result( HRESULT const result )
     BOOST_VERIFY( result == S_OK );
 }
 
+
 struct wic_view_data_t
 {
     template <typename View>
@@ -168,7 +169,7 @@ struct wic_view_data_t
     unsigned int         /*const*/ stride_;
     unsigned int         /*const*/ pixel_size_;
     BYTE               * /*const*/ p_buffer_;
-    wic_format_t               format_;
+    wic_format_t         const format_;
 
 private:
     template <typename View>

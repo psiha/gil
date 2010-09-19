@@ -42,6 +42,9 @@ namespace detail
 template <typename Pixel, bool isPlanar>
 struct gil_to_libpng_format : mpl::integral_c<int, -1> {};
 
+/// \todo Add bgr-layout formats as LibPNG actually supports them through
+/// png_set_bgr().
+///                                           (19.09.2010.) (Domagoj Saric)
 template <> struct gil_to_libpng_format<rgb8_pixel_t  , false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB       | (  8 << 16 )> {};
 template <> struct gil_to_libpng_format<rgba8_pixel_t , false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB_ALPHA | (  8 << 16 )> {};
 template <> struct gil_to_libpng_format<gray8_pixel_t , false> : mpl::integral_c<int, PNG_COLOR_TYPE_GRAY      | (  8 << 16 )> {};
@@ -514,6 +517,8 @@ private: // Private formatted_image_base interface.
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const throw(...)
     {
+        using namespace detail;
+
         std::size_t          const row_length  ( ::png_get_rowbytes( &png_object(), &info_object() ) );
         scoped_ptr<png_byte> const p_row_buffer( new png_byte[ row_length ]                          );
 
@@ -527,20 +532,26 @@ private: // Private formatted_image_base interface.
         BOOST_ASSERT( ( number_of_passes == 1 ) && "Missing interlaced support for the generic conversion case." );
         ignore_unused_variable_warning( number_of_passes );
 
-        skip_rows( detail::get_offset<offset_t>( view ) );
+        skip_rows( get_offset<offset_t>( view ) );
 
         png_byte       * const p_row    ( p_row_buffer.get() );
         png_byte const * const p_row_end( p_row + row_length );
 
-        unsigned int const rows_to_read( detail::original_view( view ).dimensions().y );
+        unsigned int const rows_to_read
+        (
+            ( get_offset<offset_t>( view ) == 0 )
+                ? original_view( view ).dimensions().y
+                : std::min( original_view( view ).dimensions().y, dimensions().y - get_offset<offset_t>( view ) )
+        );
         for ( unsigned int row_index( 0 ); row_index < rows_to_read; ++row_index )
         {
             read_row( p_row );
 
             typedef typename MyView::value_type pixel_t;
+            typedef typename get_original_view_t<TargetView>::type::x_iterator x_iterator;
 
-            pixel_t const *                 p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( p_row ) );
-            typename TargetView::x_iterator p_target_pixel( view.row_begin( row_index )                      );
+            pixel_t    const * p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( p_row ) );
+            x_iterator         p_target_pixel( original_view( view ).row_begin( row_index )     );
             while ( p_source_pixel < gil_reinterpret_cast_c<pixel_t const *>( p_row_end ) )
             {
                 converter( *p_source_pixel, *p_target_pixel );
@@ -661,10 +672,14 @@ private:
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
     }
 
-    void skip_rows( unsigned int number_of_rows_to_skip ) const
+    void skip_rows( unsigned int const row_to_skip_to ) const
     {
+        BOOST_ASSERT( ( row_to_skip_to >= png_object().row_number ) && "No 'rewind' capability for LibPNG yet." );
+
+        unsigned int number_of_rows_to_skip( row_to_skip_to - png_object().row_number );
         while ( number_of_rows_to_skip-- )
         {
+            __assume( row_to_skip_to != 0 );
             read_row( NULL );
         }
     }

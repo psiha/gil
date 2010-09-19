@@ -333,7 +333,7 @@ struct formatted_image_traits<gp_image>
         template <typename View>
         void set_bitmapdata_for_view( View const & view )
         {
-            BOOST_STATIC_ASSERT( is_supported<View>::value );
+            BOOST_STATIC_ASSERT( is_supported<typename get_original_view_t<View>::type>::value );
 
             Width       = view.width();
             Height      = view.height();

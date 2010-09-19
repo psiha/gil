@@ -188,13 +188,9 @@ private:
     }
 
 private:
-    View                                     const & view_  ;
-    typename call_traits<Offset>::param_type         offset_;
+    View   const & view_  ;
+    Offset         offset_;
 };
-
-
-template <class View, typename Offset>
-offset_view_t<View, Offset> offset_view( View const & view, Offset const & offset ) { return offset_view_t<View, Offset>( view, offset ); }
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -204,7 +200,6 @@ offset_view_t<View, Offset> offset_view( View const & view, Offset const & offse
 
 template <class Impl>
 struct formatted_image_traits;
-
 
 namespace detail
 {
@@ -337,7 +332,7 @@ protected:
     static bool dimensions_mismatch( dimensions_t const & mine, offset_view_t<View, Offset> const & offset_view )
     {
         dimensions_t const other( offset_view.dimensions() );
-        return !( ( mine.x >= other.x ) && ( mine.y >= other.y ) );
+        return ( other.x < mine.x ) || ( other.y < mine.y );
     }
 
     static void do_ensure_dimensions_match( dimensions_t const & mine, dimensions_t const & other )
@@ -497,6 +492,9 @@ protected:
 
     typedef typename formatted_image_traits<Impl>::view_data_t view_data_t;
 
+    template <class View>
+    struct is_supported : formatted_image_traits<Impl>:: BOOST_NESTED_TEMPLATE is_supported<get_original_view_t<View>::type> {};
+
 private:
     template <typename Images, typename dimensions_policy, typename formats_policy>
     class read_dynamic_image : make_dynamic_image<Images>
@@ -540,7 +538,7 @@ private:
     struct write_is_supported
     {
         template<typename View>
-        struct apply : public formatted_image_traits<Impl>::is_supported<View> {};
+        struct apply : public is_supported<View> {};
     };
 
     typedef mpl::range_c<std::size_t, 0, mpl::size<supported_pixel_formats>::value> valid_type_id_range_t;
@@ -596,7 +594,7 @@ protected:
     template <typename View>
     bool formats_mismatch() const
     {
-        return formats_mismatch( formatted_image_traits<Impl>::view_to_native_format::apply<View>::value );
+        return formats_mismatch( formatted_image_traits<Impl>::view_to_native_format:: BOOST_NESTED_TEMPLATE apply<get_original_view_t<View>::type>::value );
     }
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
@@ -634,10 +632,10 @@ public: // Views...
     template <typename View>
     void copy_to( View const & view, assert_dimensions_match, assert_formats_match ) const
     {
-        BOOST_STATIC_ASSERT( View::value_type::is_mutable );
-        BOOST_STATIC_ASSERT( formatted_image_traits<Impl>::is_supported<View>::value );
-        BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
-        BOOST_ASSERT( !impl().formats_mismatch<View>()    );
+        BOOST_STATIC_ASSERT( get_original_view_t<View>::type::value_type::is_mutable );
+        BOOST_STATIC_ASSERT( is_supported<View>::value                               );
+        BOOST_ASSERT( !impl().dimensions_mismatch( view )                            );
+        BOOST_ASSERT( !impl().formats_mismatch<View>()                               );
         impl().raw_copy_to_prepared_view
         (
             view_data_t
@@ -682,7 +680,7 @@ public: // Views...
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
         bool const can_use_raw
         (
-            formatted_image_traits<Impl>::is_supported<View>::value &&
+            is_supported          <View>::value &&
             formatted_image_traits<Impl>::builtin_conversion
         );
         default_convert_to_worker( view, mpl::bool_<can_use_raw>() );
@@ -748,6 +746,12 @@ public: // Images...
             dynamic_io_fnobj<write_is_supported, op_t>( &op )
         );
     }
+
+public: // Offset factory
+    template <class View>
+    static
+    offset_view_t<View, offset_t>
+    offset_view( View const & view, offset_t const offset ) { return offset_view_t<View, offset_t>( view, offset ); }
 
 public: // Utility 'quick-wrappers'...
     template <class Source, class Image>
@@ -895,7 +899,7 @@ private:
             mpl::bool_
             <
                 is_plain_in_memory_view<typename get_original_view_t<View>::type>::value &&
-                formatted_image_traits<Impl>::is_supported<View>::value
+                is_supported           <                             View       >::value
             >()
         );
     }
