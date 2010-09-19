@@ -435,7 +435,6 @@ struct formatted_image_traits<libtiff_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void *) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = false           );
-    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = false    );
 };
 
 

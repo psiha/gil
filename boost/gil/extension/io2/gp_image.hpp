@@ -353,7 +353,6 @@ struct formatted_image_traits<gp_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( Gdiplus::ARGB ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true                    );
-    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = true             );
 };
 
 

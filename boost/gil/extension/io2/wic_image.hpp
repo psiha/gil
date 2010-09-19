@@ -302,8 +302,7 @@ struct formatted_image_traits<wic_image>
 
     typedef mpl::map4
     <
-        mpl::pair<char           const *,  detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
-        //mpl::pair<wchar_t        const *,                                           wic_image  >,
+        mpl::pair<char           const *, detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
         mpl::pair<IStream              &,                                           detail::wic_writer  >,
         mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >,
         mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<detail::wic_writer> >
@@ -314,7 +313,6 @@ struct formatted_image_traits<wic_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-    BOOST_STATIC_CONSTANT( bool        , writers_need_source_first = true      );
 };
 
 
