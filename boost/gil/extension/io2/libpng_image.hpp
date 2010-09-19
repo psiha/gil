@@ -537,12 +537,7 @@ private: // Private formatted_image_base interface.
         png_byte       * const p_row    ( p_row_buffer.get() );
         png_byte const * const p_row_end( p_row + row_length );
 
-        unsigned int const rows_to_read
-        (
-            ( get_offset<offset_t>( view ) == 0 )
-                ? original_view( view ).dimensions().y
-                : std::min( original_view( view ).dimensions().y, dimensions().y - get_offset<offset_t>( view ) )
-        );
+        unsigned int const rows_to_read( original_view( view ).dimensions().y );
         for ( unsigned int row_index( 0 ); row_index < rows_to_read; ++row_index )
         {
             read_row( p_row );

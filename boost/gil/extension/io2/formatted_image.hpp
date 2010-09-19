@@ -221,15 +221,24 @@ View const & original_view( View const & view ) { return view; }
 
 template <typename Offset, class View>
 Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
-
 template <typename Offset, class View>
-Offset get_offset( View const & ) { return Offset(); }
+Offset         get_offset( View                       const &              ) { return Offset();             }
+
+template <typename Offset>
+Offset const & get_offset_x( Offset         const &        ) { return Offset(); }
+template <typename Offset>
+Offset const & get_offset_x( point2<Offset> const & offset ) { return offset.x; }
+
+template <typename Offset>
+Offset         get_offset_y( Offset         const & offset ) { return offset;   }
+template <typename Offset>
+Offset const & get_offset_y( point2<Offset> const & offset ) { return offset.y; }
 
 
 template <class NewView, class View, typename Offset>
 offset_view_t<NewView, Offset> offset_new_view( NewView const & new_view, offset_view_t<View, Offset> const & offset_view )
 {
-    return offset_view_t<NewView, Offset>( new_view, offset_view.offset_ );
+    return offset_view_t<NewView, Offset>( new_view, offset_view.offset() );
 }
 
 template <class NewView, class View>
@@ -331,8 +340,18 @@ protected:
     template <class View, typename Offset>
     static bool dimensions_mismatch( dimensions_t const & mine, offset_view_t<View, Offset> const & offset_view )
     {
-        dimensions_t const other( offset_view.dimensions() );
-        return ( other.x < mine.x ) || ( other.y < mine.y );
+        // Implementation note:
+        //   For offset target views all dimensions are allowed as they are
+        // intended to load an image in steps so they must be allowed to be
+        // smaller. They are also allowed to be bigger to allow GIL users to use
+        // fixed 'sub' view, while loading an image in steps, whose size is not
+        // an exact divisor of the source image dimensions.
+        //   The exception is for backends that support only vertical 'ROIs'/
+        // offsets, for those the horizontal dimensions must match.
+        //                                    (19.09.2010.) (Domagoj Saric)
+        //dimensions_t const other( offset_view.dimensions() );
+        //return ( other.x < mine.x ) || ( other.y < mine.y );
+        return is_pod<Offset>::value ? ( mine.x != offset_view.dimensions().x ) : false;
     }
 
     static void do_ensure_dimensions_match( dimensions_t const & mine, dimensions_t const & other )
@@ -361,6 +380,43 @@ protected:
     static void do_synchronize_dimensions( Image & image, dimensions_t const & my_dimensions, unsigned int const alignment = 0 )
     {
         image.recreate( my_dimensions, alignment );
+    }
+
+        
+    ////////////////////////////////////////////////////////////////////////////
+    //
+    // subview_for_offset()
+    // --------------------
+    //
+    ////////////////////////////////////////////////////////////////////////////
+    ///
+    /// \brief Locally adjusts a view with a ROI/offset to prevent it exceeding
+    /// the image dimensions when 'merged' with its offset. Done here so that
+    /// backend classes do not need to handle this.
+    /// \internal
+    /// \throws nothing
+    ///
+    ////////////////////////////////////////////////////////////////////////////
+    
+    template <typename View>
+    static View const & subview_for_offset( View const & view ) { return view; }
+
+    template <typename View, typename Offset>
+    static View subview_for_offset( dimensions_t const & my_dimensions, offset_view_t<View, Offset> const & offset_view )
+    {
+        dimensions_t const & target_dimensions( offset_view.original_view().dimensions() );
+
+        bool const zero_x_offset( is_pod<Offset>::value );
+        if ( zero_x_offset )
+        {
+            BOOST_ASSERT( get_offset_x( offset_view.offset() ) == 0 );
+            BOOST_ASSERT( my_dimensions.x == target_dimensions.x    );
+        }
+
+        unsigned int const width ( zero_x_offset ? target_dimensions.x : std::min( my_dimensions.x - get_offset_x( offset_view.offset() ), target_dimensions.x ) );
+        unsigned int const height(                                       std::min( my_dimensions.y - get_offset_y( offset_view.offset() ), target_dimensions.y ) );
+        
+        return subimage_view( offset_view.original_view(), 0, 0, width, height );
     }
 
 public: //...zzz...
@@ -621,11 +677,33 @@ protected:
     // efficient overrides...
     static image_type_id image_format_id( format_t const closest_gil_supported_format )
     {
-        // This (linear search) will be transformed to a switch...
+        // This (linear search) will be transformed into a switch...
         image_id_finder finder( closest_gil_supported_format );
         mpl::for_each<valid_type_id_range_t>( ref( finder ) );
         BOOST_ASSERT( finder.image_id_ != -1 );
         return finder.image_id_;
+    }
+
+    template <typename View, typename Offset>
+    View subview_for_offset( offset_view_t<View, Offset> const & offset_view ) const
+    {
+        return formatted_image_base::subview_for_offset( impl().dimensions(), offset_view );
+    }
+
+    template <typename View>
+    static view_data_t get_view_data( View const & view )
+    {
+        return view_data_t( view );
+    }
+
+    template <typename View>
+    view_data_t get_view_data( offset_view_t<View, offset_t> const & offset_view ) const
+    {
+        return view_data_t
+        (
+            subview_for_offset( offset_view ),
+            offset_view.offset()
+        );
     }
 
 public: // Views...
@@ -636,14 +714,7 @@ public: // Views...
         BOOST_STATIC_ASSERT( is_supported<View>::value                               );
         BOOST_ASSERT( !impl().dimensions_mismatch( view )                            );
         BOOST_ASSERT( !impl().formats_mismatch<View>()                               );
-        impl().raw_copy_to_prepared_view
-        (
-            view_data_t
-            (
-                original_view       ( view ),
-                get_offset<offset_t>( view )
-            )
-        );
+        impl().raw_copy_to_prepared_view( get_view_data( view ) );
     }
 
     template <typename View>
@@ -883,7 +954,16 @@ private:
         return switch_<valid_type_id_range_t>
         (
             source_view_type_id,
-            generic_converter_t<TargetView, CC>( impl(), cc, view ),
+            generic_converter_t<TargetView, CC>
+            (
+                impl(),
+                cc,
+                offset_new_view
+                (
+                    subview_for_offset( view ),
+                    view
+                )
+            ),
             assert_default_case_not_reached<void>()
         );
     }
@@ -911,7 +991,7 @@ private:
         unsigned int const current_image_format_id( impl().image_format_id( current_format ) );
         if ( can_do_inplace_transform<View>( current_format ) )
         {
-            view_data_t view_data( original_view( view ), get_offset<offset_t>( view ) );
+            view_data_t view_data( get_view_data( view ) );
             view_data.set_format( current_format );
             impl().raw_copy_to_prepared_view( view_data );
             in_place_transform( current_image_format_id, original_view( view ), converter );
@@ -931,14 +1011,7 @@ private:
     template <typename View>
     void default_convert_to_worker( View const & view, mpl::true_ /*can use raw*/ ) const
     {
-        impl().raw_convert_to_prepared_view
-        (
-            view_data_t
-            (
-                original_view       ( view ),
-                get_offset<offset_t>( view )
-            )
-        );
+        impl().raw_convert_to_prepared_view( get_view_data( view ) );
     }
 
     template <typename View>
