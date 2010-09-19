@@ -564,7 +564,7 @@ public:
     jpeg_decompress_struct       & lib_object()       { return decompressor(); }
     jpeg_decompress_struct const & lib_object() const { return const_cast<libjpeg_image &>( *this ).lib_object(); }
 
-private: // Private formatted_image_base interface.
+private: // Private interface for the base formatted_image<> class.
     friend base_t;
     void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const throw(...)
     {
