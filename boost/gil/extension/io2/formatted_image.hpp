@@ -19,14 +19,11 @@
 #ifndef formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 #define formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 //------------------------------------------------------------------------------
-/// \todo Investigate whether gil_all.hpp is indeed necessary.
-///                                           (26.07.2010.) (Domagoj Saric)
-#include "../../gil_all.hpp"
-
 #include "detail/io_error.hpp"
 #include "detail/switch.hpp"
 
-#include <boost/gil/extension/dynamic_image/any_image.hpp>
+#include "boost/gil/extension/dynamic_image/any_image.hpp"
+#include "boost/gil/typedefs.hpp"
 
 #include <boost/compressed_pair.hpp>
 #ifdef _DEBUG
@@ -245,14 +242,9 @@ template <class NewView, class View>
 NewView const & offset_new_view( NewView const & new_view, View const & ) { return new_view; }
 
 
-template <typename View>
-struct get_original_view_t;
-
-template <typename Locator>
-struct get_original_view_t<image_view<Locator> > { typedef image_view<Locator> type; };
-
-template <typename View, typename Offset>
-struct get_original_view_t<offset_view_t<View, Offset> > { typedef View type; };
+template <typename View                 > struct get_original_view_t;
+template <typename Locator              > struct get_original_view_t<image_view<Locator>         > { typedef image_view<Locator> type; };
+template <typename View, typename Offset> struct get_original_view_t<offset_view_t<View, Offset> > { typedef View                type; };
 
 // Tag base classes for writer implementations.
 struct configure_on_write_writer {};

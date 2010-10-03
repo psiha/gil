@@ -19,12 +19,13 @@
 #ifndef gp_private_base_hpp__3B1ED5BC_42C6_4EC6_B700_01C1B8646431
 #define gp_private_base_hpp__3B1ED5BC_42C6_4EC6_B700_01C1B8646431
 //------------------------------------------------------------------------------
-#include "../../gil_all.hpp"
 #include "detail/io_error.hpp"
 #include "detail/gp_extern_lib_guard.hpp"
 #include "detail/windows_shared.hpp"
 #include "detail/windows_shared_istreams.hpp"
 #include "formatted_image.hpp"
+
+#include "boost/gil/packed_pixel.hpp"
 
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>

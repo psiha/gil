@@ -236,7 +236,10 @@ struct view_data_t : decompression_setup_data_t
 };
 
 
-class libjpeg_writer : private libjpeg_base, public configure_on_write_writer
+class libjpeg_writer
+    :
+    private libjpeg_base,
+    public  configure_on_write_writer
 {
 public:
     explicit libjpeg_writer( char const * const p_target_file_name )
