@@ -22,6 +22,7 @@
 #include "detail/libx_shared.hpp"
 #include "detail/shared.hpp"
 
+#include <boost/array.hpp>
 #include <boost/smart_ptr/scoped_ptr.hpp>
 
 #define JPEG_INTERNALS
@@ -51,7 +52,6 @@ struct gil_to_libjpeg_format : mpl::integral_c<J_COLOR_SPACE, JCS_UNKNOWN> {};
 template <> struct gil_to_libjpeg_format<rgb8_pixel_t , false> : mpl::integral_c<J_COLOR_SPACE, JCS_RGB      > {};
 template <> struct gil_to_libjpeg_format<gray8_pixel_t, false> : mpl::integral_c<J_COLOR_SPACE, JCS_GRAYSCALE> {};
 template <> struct gil_to_libjpeg_format<cmyk8_pixel_t, false> : mpl::integral_c<J_COLOR_SPACE, JCS_CMYK     > {};
-
 
 
 struct view_libjpeg_format
@@ -434,6 +434,8 @@ struct formatted_image_traits<libjpeg_image>
                 mpl::pair<FILE       &, detail::libjpeg_writer>,
                 mpl::pair<char const *, detail::libjpeg_writer>
             > writers;
+
+    typedef mpl::vector1_c<format_tag, jpeg> supported_image_formats;
 
     typedef view_data_t writer_view_data_t;
 

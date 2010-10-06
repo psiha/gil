@@ -404,6 +404,8 @@ struct formatted_image_traits<libpng_image>
                 mpl::pair<char const *, detail::output_c_str_for_c_file_extender<detail::libpng_writer_FILE> >
             > writers;
 
+    typedef mpl::vector1_c<format_tag, png> supported_image_formats;
+
     typedef view_data_t writer_view_data_t;
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
@@ -532,7 +534,8 @@ private: // Private formatted_image_base interface.
         BOOST_ASSERT( ( number_of_passes == 1 ) && "Missing interlaced support for the generic conversion case." );
         ignore_unused_variable_warning( number_of_passes );
 
-        skip_rows( get_offset<offset_t>( view ) );
+        if ( is_offset_view<TargetView>::value )
+            skip_rows( get_offset<offset_t>( view ) );
 
         png_byte       * const p_row    ( p_row_buffer.get() );
         png_byte const * const p_row_end( p_row + row_length );

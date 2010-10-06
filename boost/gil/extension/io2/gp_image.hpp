@@ -25,8 +25,6 @@
 #include "detail/windows_shared_istreams.hpp"
 #include "formatted_image.hpp"
 
-#include "boost/gil/packed_pixel.hpp"
-
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/integral_c.hpp>
@@ -211,59 +209,48 @@ public:
     }
 
     template <typename Target>
-    void write_default( Target const & target )
+    void write_default( Target const & target, format_tag const format )
     {
         BOOST_ASSERT( lib_object().second == NULL );
-        write( target );
+        write( target, format );
     }
 
-    void write( char    const * const pFilename, CLSID const & encoderID = jpg_codec() ) const
+    void write( char    const * const pFilename, format_tag const format ) const
     {
-        write( detail::wide_path( pFilename ), encoderID );
+        write( detail::wide_path( pFilename ), format );
     }
 
-    void write( wchar_t const * const pFilename, CLSID const & encoderID = jpg_codec() ) const
+    void write( wchar_t const * const pFilename, format_tag const format ) const
     {
-        save_to( pFilename, encoderID );
+        detail::ensure_result
+        (
+            Gdiplus::DllExports::GdipSaveImageToFile
+            (
+                lib_object().first,
+                pFilename,
+                &encoder_id( format ),
+                lib_object().second
+            )
+        );
     }
 
     lib_object_t       & lib_object()       { return lib_instance_; }
     lib_object_t const & lib_object() const { return lib_instance_; }
 
 private:
-    void save_to_png( char    const * const pFilename ) const { save_to( pFilename, png_codec() ); }
-    void save_to_png( wchar_t const * const pFilename ) const { save_to( pFilename, png_codec() ); }
-
-    void save_to( char    const * const pFilename, CLSID const & encoderID ) const { save_to( detail::wide_path( pFilename ), encoderID ); }
-    void save_to( wchar_t const * const pFilename, CLSID const & encoderID ) const
+    static CLSID const & encoder_id( format_tag const format )
     {
-        detail::ensure_result( Gdiplus::DllExports::GdipSaveImageToFile( lib_object().first, pFilename, &encoderID, lib_object().second ) );
-    }
-
-    static CLSID const & png_codec()
-    {
-        static CLSID const clsid = { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & jpg_codec()
-    {
-        static CLSID const clsid = { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & tiff_codec()
-    {
-        static CLSID const clsid = { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & gif_codec()
-    {
-        static CLSID const clsid = { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
-    }
-    static CLSID const & bmp_codec()
-    {
-        static CLSID const clsid = { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E };
-        return clsid;
+        static CLSID const ids[ number_of_known_formats ] =
+        {
+            { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // BMP
+            { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // GIF
+            { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // JPEG
+            { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // PNG
+            { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // TIFF
+            CLSID_NULL // TGA
+        };
+        BOOST_ASSERT( ids[ format ] != CLSID_NULL );
+        return ids[ format ];
     }
 
 private:
@@ -309,6 +296,8 @@ struct formatted_image_traits<gp_image>
             mpl::pair<FILE                 &, detail::gp_writer>,
             mpl::pair<memory_chunk_t const &, detail::gp_writer>
         > writers;
+
+    typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
 
     class view_data_t : public Gdiplus::BitmapData
     {

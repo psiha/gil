@@ -119,6 +119,13 @@ public:
         FileWriteStream      ( file                            ),
         IStream_capable_class( static_cast<IStream &>( *this ) )
     {}
+
+    template <typename A2> //...zzz...
+    output_FILE_for_IStream_extender( FILE & file, A2 const & a2 )
+        :
+        FileWriteStream      ( file                                ),
+        IStream_capable_class( static_cast<IStream &>( *this ), a2 )
+    {}
 };
 
 

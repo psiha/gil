@@ -23,15 +23,18 @@
 #include "detail/libx_shared.hpp"
 
 #if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
-    ...error...libtiff support requires mpl vectors of size 35 or greater...
+...error...libtiff support requires mpl vectors of size 35 or greater...
 #endif
 
 #include <boost/array.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
 
-#include "tiff.h"
-#include "tiffio.h"
+extern "C"
+{
+    #include "tiff.h"
+    #include "tiffio.h"
+}
 
 #include <cstdio>
 #include <set>
@@ -54,17 +57,17 @@ unsigned short const unknown( static_cast<unsigned short>( -1 ) );
 #define LIBTIFF_FMT(         param ) ( ( param ) << ( 0 + 3 + 5 ) )
 #define LIBTIFF_PLANAR(      param ) ( ( param ) << ( 0 + 3 + 5 + 3 ) )
 #define LIBTIFF_PHOTOMETRIC( param ) ( ( param ) << ( 0 + 3 + 5 + 3 + 2 ) )
-#define LIBTIFF_INKSET(      param ) ( ( param ) << ( 0 + 3 + 5 + 3 + 2 + 2 ) )
+#define LIBTIFF_INKSET(      param ) ( ( param ) << ( 0 + 3 + 5 + 3 + 2 + 3 ) )
 
 #define LIBTIFF_FORMAT( spp, bps, sample_format, planar_config, photometric_interpretation, inkset )    \
-    (                                                                                                   \
+(                                                                                                       \
         LIBTIFF_SPP(         spp                        ) |                                             \
         LIBTIFF_BPS(         bps                        ) |                                             \
         LIBTIFF_FMT(         sample_format              ) |                                             \
         LIBTIFF_PLANAR(      planar_config              ) |                                             \
         LIBTIFF_PHOTOMETRIC( photometric_interpretation ) |                                             \
         LIBTIFF_INKSET(      inkset                     )                                               \
-    )
+)
 
 
 union full_format_t
@@ -75,7 +78,7 @@ union full_format_t
         unsigned int bits_per_sample      : 5;
         unsigned int sample_format        : 3;
         unsigned int planar_configuration : 2;
-        unsigned int photometric          : 2;
+        unsigned int photometric          : 3;
         unsigned int ink_set              : 2;
     };
 
@@ -208,17 +211,16 @@ inline void FILE_unmap_proc( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*si
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
 
-
 struct tiff_view_data_t
 {
     template <class View>
-    explicit tiff_view_data_t( View const & view, generic_vertical_roi::offset_t const offset )
+    explicit tiff_view_data_t( View const & view, generic_vertical_roi::offset_t const offset = 0 )
         :
-        offset_    ( offset                                     ),
-        dimensions_( view.dimensions()                          ),
-        stride_    ( view.pixels().row_size()                   )
+        dimensions_( view.dimensions()        ),
+        stride_    ( view.pixels().row_size() ),
+        offset_    ( offset                   )
         #ifdef _DEBUG
-            ,format_id_( view_libtiff_format::apply<View>::value   )
+            ,format_id_( view_libtiff_format::apply<View>::value )
         #endif
     {
         set_buffers( view, is_planar<View>() );
@@ -230,11 +232,11 @@ struct tiff_view_data_t
         ignore_unused_variable_warning( format );
     }
 
-    generic_vertical_roi::offset_t         offset_;
-    point2<std::ptrdiff_t>         const & dimensions_;
-    unsigned int                           stride_;
+    point2<std::ptrdiff_t>         const & dimensions_      ;
+    unsigned int                           stride_          ;
     unsigned int                           number_of_planes_;
-    array<unsigned char *, 4>              plane_buffers_;
+    array<unsigned char *, 4>              plane_buffers_   ;
+    generic_vertical_roi::offset_t         offset_          ;
 
     #ifdef _DEBUG
         unsigned int format_id_;
@@ -261,6 +263,7 @@ private: // this should probably go to the base formatted_image class...
     void operator=( tiff_view_data_t const & );
 };
 
+
 struct tiff_writer_view_data_t : public tiff_view_data_t
 {
     template <class View>
@@ -273,6 +276,7 @@ struct tiff_writer_view_data_t : public tiff_view_data_t
 
     full_format_t format_;
 };
+
 
 class libtiff_base
 {
@@ -291,10 +295,10 @@ protected:
     explicit libtiff_base( FILE & file )
         :
         p_tiff_
+    (
+        ::TIFFClientOpen
         (
-            ::TIFFClientOpen
-            (
-                "", "",
+            "", "",
                 &file,
                 &detail::FILE_read_proc,
                 &detail::FILE_write_proc,
@@ -303,13 +307,13 @@ protected:
                 &detail::FILE_size_proc,
                 &detail::FILE_map_proc,
                 &detail::FILE_unmap_proc
-            )
         )
+    )
     {
         construction_check();
     }
 
-
+    __declspec( nothrow )
     ~libtiff_base()
     {
         ::TIFFClose( &lib_object() );
@@ -332,7 +336,11 @@ private:
     TIFF * const p_tiff_;
 };
 
-class libtiff_writer : public libtiff_base, public configure_on_write_writer
+
+class libtiff_writer
+    :
+    public libtiff_base,
+    public configure_on_write_writer
 {
 public:
     explicit libtiff_writer( char const * const file_name ) : detail::libtiff_base( file_name, "w" ) {}
@@ -344,14 +352,14 @@ public:
         full_format_t::format_bitfield const format_bits( view.format_.bits );
         //BOOST_ASSERT( ( format_bits.planar_configuration == PLANARCONFIG_CONTIG ) && "Add planar support..." );
 
-        set_field( TIFFTAG_IMAGEWIDTH , view.dimensions_.x );
-        set_field( TIFFTAG_IMAGELENGTH, view.dimensions_.y );
-        set_field( TIFFTAG_BITSPERSAMPLE, format_bits.bits_per_sample );
-        set_field( TIFFTAG_SAMPLESPERPIXEL, format_bits.samples_per_pixel );
-        set_field( TIFFTAG_PLANARCONFIG, format_bits.planar_configuration );
-        set_field( TIFFTAG_PHOTOMETRIC, format_bits.photometric );
-        set_field( TIFFTAG_INKSET, format_bits.ink_set );
-        set_field( TIFFTAG_SAMPLEFORMAT, format_bits.sample_format );
+        set_field( TIFFTAG_IMAGEWIDTH     , view.dimensions_.x               );
+        set_field( TIFFTAG_IMAGELENGTH    , view.dimensions_.y               );
+        set_field( TIFFTAG_BITSPERSAMPLE  , format_bits.bits_per_sample      );
+        set_field( TIFFTAG_SAMPLESPERPIXEL, format_bits.samples_per_pixel    );
+        set_field( TIFFTAG_PLANARCONFIG   , format_bits.planar_configuration );
+        set_field( TIFFTAG_PHOTOMETRIC    , format_bits.photometric          );
+        set_field( TIFFTAG_INKSET         , format_bits.ink_set              );
+        set_field( TIFFTAG_SAMPLEFORMAT   , format_bits.sample_format        );
 
         set_field( TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT );
 
@@ -376,7 +384,7 @@ public:
             unsigned int const target_row( view.dimensions_.y );
             while ( row < target_row )
             {
-                result.accumulate_equal( ::TIFFWriteScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                result.accumulate_greater( ::TIFFWriteScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 0 );
                 buf += view.stride_;
             }
         }
@@ -430,6 +438,8 @@ struct formatted_image_traits<libtiff_image>
         mpl::pair<char const *, detail::libtiff_writer>,
         mpl::pair<FILE       &, detail::libtiff_writer>
     > writers;
+
+    typedef mpl::vector1_c<format_tag, tiff> supported_image_formats;
 
     typedef detail::tiff_writer_view_data_t writer_view_data_t;
 
@@ -582,10 +592,6 @@ private: // Private formatted_image_base interface.
                 bool const starting_at_last_row( ( number_of_tiles - starting_tile ) <= tiles_per_row );
                 rows_to_read_per_tile = starting_at_last_row ? end_rows_to_read : tile_height;
             }
-
-            #ifdef _DEBUG
-                std::memset( p_tile_buffer.get(), 0xFF, tile_size_bytes * ( nptcc ? source.format_bits().samples_per_pixel : 1 ) );
-            #endif // _DEBUG
         }
 
         uint32 const tile_height;
@@ -680,7 +686,7 @@ private: // Private formatted_image_base interface.
                 unsigned int row( view_data.offset_ );
                 while ( row != ( view_data.offset_ + skip_result.rows_to_read_using_scanlines ) )
                 {
-                    result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                    result.accumulate_greater( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 0 );
                     buf += view_data.stride_;
                 }
 
@@ -689,7 +695,7 @@ private: // Private formatted_image_base interface.
                 {
                     for ( unsigned int strip( skip_result.starting_strip ); strip < number_of_strips; ++strip )
                     {
-                        result.accumulate_different( ::TIFFReadEncodedStrip( &lib_object(), strip, buf, view_strip_increment ), -1 );
+                        result.accumulate_greater( ::TIFFReadEncodedStrip( &lib_object(), strip, buf, view_strip_increment ), 0 );
                         buf += view_strip_increment;
                         row += skip_result.rows_per_strip;
                     }
@@ -698,7 +704,7 @@ private: // Private formatted_image_base interface.
                 unsigned int const target_row( view_data.offset_ + view_data.dimensions_.y );
                 while ( row < target_row )
                 {
-                    result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 1 );
+                    result.accumulate_greater( ::TIFFReadScanline( &lib_object(), buf, row++, static_cast<tsample_t>( plane ) ), 0 );
                     buf += view_data.stride_;
                 }
             }
@@ -707,7 +713,7 @@ private: // Private formatted_image_base interface.
         result.throw_if_error();
     }
 
-    
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // generic_convert_to_prepared_view()
@@ -720,10 +726,12 @@ private: // Private formatted_image_base interface.
     ///                                    (16.09.2010.) (Domagoj Saric)
     ///
     ////////////////////////////////////////////////////////////////////////////
-    
+
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
+        using namespace detail;
+
         typedef typename get_original_view_t<TargetView>::type original_target_view_t;
 
         typedef typename mpl::eval_if
@@ -942,8 +950,9 @@ private: // Private formatted_image_base interface.
                     for ( unsigned int plane( 0 ); plane < number_of_planes; ++plane )
                     {
                         tdata_t const p_buffer( &(*buffer_iterator)[ plane ] );
-                        skip_to_row( get_offset<offset_t>( view ), plane, p_buffer, result );
-                        result.accumulate_equal( ::TIFFReadScanline( &lib_object(), p_buffer, row, static_cast<tsample_t>( plane ) ), 1 );
+                        //...zzz...yup...not the most efficient thing in the universe...
+                        skip_to_row( get_offset<offset_t>( view ) + row, plane, p_buffer, result );
+                        result.accumulate_greater( ::TIFFReadScanline( &lib_object(), p_buffer, row, static_cast<tsample_t>( plane ) ), 0 );
                     }
                     typename          MyView       ::x_iterator p_source_pixel( buffer_iterator );
                     typename original_target_view_t::x_iterator p_target_pixel( p_target.base() );
@@ -961,7 +970,8 @@ private: // Private formatted_image_base interface.
             {
                 for ( unsigned int plane( 0 ); plane < number_of_planes; ++plane )
                 {
-                    skip_to_row( get_offset<offset_t>( view ), plane, scanline_buffer.begin(), result );
+                    if ( is_offset_view<TargetView>::value )
+                        skip_to_row( get_offset<offset_t>( view ), plane, scanline_buffer.begin(), result );
 
                     local_target_view_t const & target_view( adjust_target_to_my_view( original_view( view ), plane, is_planar<MyView>() ) );
                     target_y_iterator p_target( target_view.y_at( 0, 0 ) );
@@ -969,7 +979,7 @@ private: // Private formatted_image_base interface.
                     unsigned int const target_row( row + dimensions.y           );
                     while ( row != target_row )
                     {
-                        result.accumulate_equal( ::TIFFReadScanline( &lib_object(), scanline_buffer.begin(), row++, static_cast<tsample_t>( plane ) ), 1 );
+                        result.accumulate_greater( ::TIFFReadScanline( &lib_object(), scanline_buffer.begin(), row++, static_cast<tsample_t>( plane ) ), 0 );
                         my_pixel_t const * p_source_pixel( scanline_buffer.begin() );
                         target_x_iterator  p_target_pixel( p_target.base()         );
                         while ( p_source_pixel != scanline_buffer.end() )
@@ -1050,18 +1060,15 @@ private:
     }
 
     typedef std::pair
-        <
-            scoped_array<unsigned char> const,
-            unsigned char const * const
-        > generic_scanline_buffer_t;
+    <
+        scoped_array<unsigned char> const,
+        unsigned char const * const
+    > generic_scanline_buffer_t;
 
     static generic_scanline_buffer_t scanline_buffer_aux( TIFF & tiff )
     {
         unsigned int const scanlineSize( ::TIFFScanlineSize( &tiff ) );
         unsigned char * const p_buffer( new unsigned char[ scanlineSize ] );
-        #ifdef _DEBUG
-            std::memset( p_buffer, 0xFF, scanlineSize );
-        #endif // _DEBUG
         return std::make_pair( p_buffer, p_buffer + scanlineSize );
     }
 
@@ -1071,9 +1078,6 @@ private:
     {
         unsigned int const scanlineSize( tiff.format_bits().bits_per_sample * tiff.dimensions().x / 8 );
         unsigned char * const p_buffer( new unsigned char[ scanlineSize * tiff.format_bits().samples_per_pixel ] );
-        #ifdef _DEBUG
-            std::memset( p_buffer, 0xFF, scanlineSize * tiff.format_bits().samples_per_pixel );
-        #endif // _DEBUG
         return std::make_pair( p_buffer, p_buffer + scanlineSize );
     }
 
@@ -1104,7 +1108,7 @@ private:
         generic_scanline_buffer_t const buffer_;
     };
 
-
+    __declspec( nothrow )
     skip_row_results_t skip_to_row
     (
         unsigned int        const row_to_skip_to,
@@ -1134,7 +1138,7 @@ private:
         );
         while ( row < row_to_skip_to )
         {
-            error_result.accumulate_equal( ::TIFFReadScanline( &lib_object(), buffer, row++, static_cast<tsample_t>( sample ) ), 1 );
+            error_result.accumulate_greater( ::TIFFReadScanline( &lib_object(), buffer, row++, static_cast<tsample_t>( sample ) ), 0 );
         }
 
         //BOOST_ASSERT( !row_to_skip_to || ( ::TIFFCurrentRow( &lib_object() ) == row_to_skip_to ) );

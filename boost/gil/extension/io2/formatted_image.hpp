@@ -19,10 +19,14 @@
 #ifndef formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 #define formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 //------------------------------------------------------------------------------
+#include "format_tags.hpp"
 #include "detail/io_error.hpp"
 #include "detail/switch.hpp"
 
 #include "boost/gil/extension/dynamic_image/any_image.hpp"
+#include "boost/gil/packed_pixel.hpp"
+#include "boost/gil/planar_pixel_iterator.hpp"
+#include "boost/gil/planar_pixel_reference.hpp"
 #include "boost/gil/typedefs.hpp"
 
 #include <boost/compressed_pair.hpp>
@@ -33,6 +37,7 @@
 #include <boost/mpl/for_each.hpp>
 #include <boost/mpl/integral_c.hpp>
 #include <boost/mpl/map.hpp>
+#include <boost/mpl/vector_c.hpp>
 #ifdef _DEBUG
 #include <boost/numeric/conversion/converter.hpp>
 #include <boost/numeric/conversion/converter_policies.hpp>
@@ -55,37 +60,6 @@ struct synchronize_dimensions  {};
 struct assert_formats_match {};
 struct ensure_formats_match {};
 struct synchronize_formats  {};
-
-
-//...zzz...test unrolled 24bit-16bit conversion
-//template <typename ChannelValue, typename Layout, typename BitField, typename ChannelRefVec>
-//void color_convert
-//(
-//    pixel       <ChannelValue, Layout>            const & src,
-//    packed_pixel<BitField, ChannelRefVec, Layout>       & dst
-//)
-//{
-//    struct bfield_t
-//    {
-//        BitField r : 5;
-//        BitField g : 6;
-//        BitField b : 5;
-//    };
-//    //BitField & fast_dst( reinterpret_cast<BitField &>( dst ) );
-//    bfield_t & fast_dst( reinterpret_cast<bfield_t &>( dst._bitfield ) );
-//
-//    unsigned char const source_max     ( detail::unsigned_integral_max_value<ChannelValue>::value );
-//    //unsigned char const rb_max( (1<<5)-1 );
-//    //unsigned char const g_max( (1<<6)-1 );
-//    unsigned int const rtmp( ( static_cast<unsigned short>( src[ 0 ] ) << 5 ) - src[ 0 ] );
-//    unsigned int const btmp( ( static_cast<unsigned short>( src[ 2 ] ) << 5 ) - src[ 2 ] );
-//    unsigned int const gtmp( ( static_cast<unsigned short>( src[ 1 ] ) << 6 ) - src[ 1 ] );
-//
-//    fast_dst.r = ( rtmp / source_max ) + ( ( rtmp % source_max ) > ( source_max / 2 ) );
-//    fast_dst.b = ( btmp / source_max ) + ( ( btmp % source_max ) > ( source_max / 2 ) );
-//    fast_dst.g = ( gtmp / source_max ) + ( ( gtmp % source_max ) > ( source_max / 2 ) );
-//}
-
 
 #if defined(BOOST_MSVC)
 #   pragma warning( push )
@@ -217,12 +191,12 @@ template <class View>
 View const & original_view( View const & view ) { return view; }
 
 template <typename Offset, class View>
-Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
+Offset         get_offset( View                        const &             ) { return Offset();            }
 template <typename Offset, class View>
-Offset         get_offset( View                       const &              ) { return Offset();             }
+Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
 
 template <typename Offset>
-Offset const & get_offset_x( Offset         const &        ) { return Offset(); }
+Offset         get_offset_x( Offset         const &        ) { return Offset(); }
 template <typename Offset>
 Offset const & get_offset_x( point2<Offset> const & offset ) { return offset.x; }
 
@@ -242,67 +216,106 @@ template <class NewView, class View>
 NewView const & offset_new_view( NewView const & new_view, View const & ) { return new_view; }
 
 
+template <class View>
+struct is_offset_view : mpl::false_ {};
+
+template <class View, typename Offset>
+struct is_offset_view<offset_view_t<View, Offset> > : mpl::true_ {};
+
+
 template <typename View                 > struct get_original_view_t;
 template <typename Locator              > struct get_original_view_t<image_view<Locator>         > { typedef image_view<Locator> type; };
 template <typename View, typename Offset> struct get_original_view_t<offset_view_t<View, Offset> > { typedef View                type; };
 
-// Tag base classes for writer implementations.
-struct configure_on_write_writer {};
-struct open_on_write_writer      {};
+
+////////////////////////////////////////////////////////////////////////////////
+// Wrappers that normalize wrapper interfaces.
+////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class open_then_configure_writer_wrapper
+/// \class configure_on_write_writer
 /// \internal
 /// \brief Helper wrapper for backends/writers that first need to open the
 /// target/file and then be configured for the desired view.
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename Writer, typename WriterTarget, typename ViewDataHolder>
-class open_then_configure_writer_wrapper : public Writer
+struct configure_on_write_writer
 {
-public:
-    template <typename View>
-    open_then_configure_writer_wrapper( WriterTarget const target, View const & view )
-        :
-        Writer    ( target ),
-        view_data_( view   )
-    {}
+    template <typename Writer, typename WriterTarget, typename ViewDataHolder, format_tag DefaultFormat>
+    class wrapper : public Writer
+    {
+    public:
+        template <typename View>
+        wrapper( WriterTarget const & target, View const & view, format_tag const specified_format = DefaultFormat )
+            :
+            Writer    ( target, specified_format ),
+            view_data_( view                     )
+        {}
 
-    void write_default() { Writer::write_default( view_data_ ); }
-    void write        () { Writer::write        ( view_data_ ); }
+        void write_default() { Writer::write_default( view_data_ ); }
+        void write        () { Writer::write        ( view_data_ ); }
 
-private:
-    ViewDataHolder const view_data_;
+    private:
+        ViewDataHolder const view_data_;
+    };
+
+    template <typename Writer, typename WriterTarget, format_tag OnlyFormat>
+    class single_format_writer_wrapper : public Writer
+    {
+    public:
+        single_format_writer_wrapper( WriterTarget const & target, format_tag const specified_format = OnlyFormat )
+            :
+            Writer( target )
+        {
+            BOOST_VERIFY( specified_format == OnlyFormat );
+        }
+    };
 };
 
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class configure_then_open_writer_wrapper
+/// \class open_on_write_writer
 /// \internal
 /// \brief Helper wrapper for backends/writers that first need to be configured
 /// for/created from the desired view and then open the target/file.
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename Writer, typename WriterTarget>
-class configure_then_open_writer_wrapper : public Writer
+struct open_on_write_writer
 {
-public:
-    template <typename View>
-    configure_then_open_writer_wrapper( WriterTarget const target, View const & view )
-        :
-        Writer ( view   ),
-        target_( target )
-    {}
+    template <typename Writer, typename WriterTarget, typename ViewDataHolder, format_tag DefaultFormat>
+    class wrapper : public Writer
+    {
+    public:
+        template <typename View>
+        wrapper( WriterTarget const & target, View const & view, format_tag const specified_format = DefaultFormat )
+            :
+            Writer           ( view             ),
+            target_          ( target           ),
+            specified_format_( specified_format )
+        {}
 
-    void write_default() { Writer::write_default( target_ ); }
-    void write        () { Writer::write        ( target_ ); }
+        void write_default() { Writer::write_default( target_, specified_format_ ); }
+        void write        () { Writer::write        ( target_, specified_format_ ); }
 
-private:
-    WriterTarget const target_;
+    private:
+        typename call_traits<WriterTarget>::param_type const target_;
+                             format_tag                const specified_format_;
+    };
+
+    template <typename Writer, typename WriterTarget, format_tag OnlyFormat>
+    class single_format_writer_wrapper : public Writer
+    {
+    public:
+        template <typename View>
+        single_format_writer_wrapper( View const & view ) : Writer( view ) {}
+
+        void write_default( WriterTarget const & target, format_tag const specified_format = OnlyFormat ) { BOOST_VERIFY( specified_format == OnlyFormat ); Writer::write_default( target ); }
+        void write        ( WriterTarget const & target, format_tag const specified_format = OnlyFormat ) { BOOST_VERIFY( specified_format == OnlyFormat ); Writer::write        ( target ); }
+    };
 };
 
 
@@ -312,7 +325,7 @@ private:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class formatted_image_base : noncopyable
+class formatted_image_base : public /*khm private seems to bug MSVC++ 10 with the libtiff backend....*/ noncopyable
 {
 public:
     typedef point2<std::ptrdiff_t> dimensions_t;
@@ -322,12 +335,8 @@ public:
 
 protected:
     static bool dimensions_mismatch( dimensions_t const & mine, dimensions_t const & other ) { return mine != other; }
-
     template <class View>
-    static bool dimensions_mismatch( dimensions_t const & mine, View         const & view  )
-    {
-        return dimensions_mismatch( mine, view.dimensions() );
-    }
+    static bool dimensions_mismatch( dimensions_t const & mine, View         const & view  ) { return dimensions_mismatch( mine, view.dimensions() ); }
 
     template <class View, typename Offset>
     static bool dimensions_mismatch( dimensions_t const & mine, offset_view_t<View, Offset> const & offset_view )
@@ -517,20 +526,32 @@ public:
     struct writer_for
     {
     private:
-        typedef typename mpl::at<typename formatted_image_traits<Impl>::writers, Target>::type writer_t;
+        typedef typename formatted_image_traits<Impl>::supported_image_formats supported_image_formats;
+
+        BOOST_STATIC_CONSTANT( format_tag, default_format = mpl::front<supported_image_formats>::type::value );
+        BOOST_STATIC_CONSTANT( bool      , single_format  = mpl::size <supported_image_formats>::value == 1  );
+
+        typedef typename mpl::at
+                <
+                    typename formatted_image_traits<Impl>::writers,
+                    Target
+                >::type base_writer_t;
+
+        typedef typename mpl::if_c
+                <
+                    single_format,
+                    typename base_writer_t:: BOOST_NESTED_TEMPLATE single_format_writer_wrapper<base_writer_t, Target, default_format>,
+                    base_writer_t
+                >::type first_layer_wrapper;
 
     public:
-        typedef typename mpl::if_
-                         <
-                            is_base_of<configure_on_write_writer, writer_t>,
-                            open_then_configure_writer_wrapper<writer_t, Target, typename formatted_image_traits<Impl>::writer_view_data_t>,
-                            typename mpl::if_
-                            <
-                                is_base_of<open_on_write_writer, writer_t>,
-                                configure_then_open_writer_wrapper<writer_t, Target>,
-                                writer_t
-                            >::type
-                         >::type type;
+        typedef typename base_writer_t::wrapper
+            <
+                first_layer_wrapper,
+                Target,
+                typename formatted_image_traits<Impl>::writer_view_data_t,
+                default_format
+            > type;
     };
 
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
@@ -617,7 +638,7 @@ private:
     };
 
 private:
-    // ...zzz...MSVC++ 10 generates code to check whether this == 0.txt...investigate...
+    // ...zzz...MSVC++ 10 generates code to check whether this == 0...investigate...
     Impl       & impl()       { __assume( this != 0 ); return static_cast<Impl       &>( *this ); }
     Impl const & impl() const { __assume( this != 0 ); return static_cast<Impl const &>( *this ); }
 
@@ -675,6 +696,9 @@ protected:
         BOOST_ASSERT( finder.image_id_ != -1 );
         return finder.image_id_;
     }
+
+    template <typename View>
+    static View const & subview_for_offset( View const & view ) { return view; }
 
     template <typename View, typename Offset>
     View subview_for_offset( offset_view_t<View, Offset> const & offset_view ) const
@@ -748,8 +772,7 @@ public: // Views...
         );
         default_convert_to_worker( view, mpl::bool_<can_use_raw>() );
     }
-
-
+    
     template <typename FormatConverter, typename View>
     void copy_to( View const & view, ensure_dimensions_match, FormatConverter const & format_converter ) const
     {
@@ -952,6 +975,7 @@ private:
                 cc,
                 offset_new_view
                 (
+                    // See the note for formatted_image_base::subview_for_offset()...
                     subview_for_offset( view ),
                     view
                 )
@@ -984,7 +1008,10 @@ private:
         if ( can_do_inplace_transform<View>( current_format ) )
         {
             view_data_t view_data( get_view_data( view ) );
-            view_data.set_format( current_format );
+            if ( formatted_image_traits<Impl>::builtin_conversion )
+                view_data.set_format( current_format );
+            else
+                BOOST_ASSERT( current_format == impl().format() );
             impl().raw_copy_to_prepared_view( view_data );
             in_place_transform( current_image_format_id, original_view( view ), converter );
         }

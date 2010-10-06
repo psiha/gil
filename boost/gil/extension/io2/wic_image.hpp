@@ -202,9 +202,9 @@ public:
     lib_object_t & lib_object() { return lib_object_; }
 
 public:
-    wic_writer( IStream & target )
+    wic_writer( IStream & target, format_tag const format )
     {
-        create_encoder( GUID_ContainerFormatPng, target );
+        create_encoder( target, encoder_guid( format ) );
     }
 
     void write_default( wic_view_data_t const & view_data )
@@ -247,11 +247,26 @@ public:
     void write( wic_view_data_t const & view_data ) { write_default( view_data ); }
 
 private:
-    void create_encoder( GUID const & format, IStream & target )
+    void create_encoder( IStream & target, GUID const & format )
     {
         ensure_result( wic_factory<>::singleton().CreateEncoder( format, NULL, &lib_object().p_encoder_ ) );
         ensure_result( lib_object().p_encoder_->Initialize( &target, WICBitmapEncoderNoCache )            );
         ensure_result( lib_object().p_encoder_->CreateNewFrame( &lib_object().p_frame_, &lib_object().p_frame_parameters_ ) );
+    }
+
+    static GUID const & encoder_guid( format_tag const format )
+    {
+        static GUID const * const guids[ number_of_known_formats ] =
+        {
+            &GUID_ContainerFormatBmp,
+            &GUID_ContainerFormatGif,
+            &GUID_ContainerFormatJpeg,
+            &GUID_ContainerFormatPng,
+            &GUID_ContainerFormatTiff,
+            NULL // TGA
+        };
+        BOOST_ASSERT( guids[ format ] != NULL );
+        return *guids[ format ];
     }
 
     IWICBitmapFrameEncode & frame  () { return *lib_object().p_frame_  ; }
@@ -307,6 +322,8 @@ struct formatted_image_traits<wic_image>
         mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >,
         mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<detail::wic_writer> >
     > writers;
+
+    typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
 
     typedef detail::wic_view_data_t view_data_t       ;
     typedef view_data_t             writer_view_data_t;
