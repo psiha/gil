@@ -363,13 +363,13 @@ public:
 public: /// \ingroup Construction
     explicit gp_image( wchar_t const * const filename )
     {
-        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( filename, &pBitmap_ ) );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFile( filename, &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
     explicit gp_image( char const * const filename )
     {
-        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFileICM( detail::wide_path( filename ), &pBitmap_ ) );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromFile( detail::wide_path( filename ), &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 
@@ -377,7 +377,7 @@ public: /// \ingroup Construction
     // lazy evaluation).
     explicit gp_image( IStream & stream )
     {
-        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStreamICM( &stream, &pBitmap_ ) );
+        detail::ensure_result( Gdiplus::DllExports::GdipCreateBitmapFromStream( &stream, &pBitmap_ ) );
         BOOST_ASSERT( pBitmap_ );
     }
 

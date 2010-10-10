@@ -92,17 +92,17 @@ BOOST_DELAYED_EXTERN_LIB_GUARD
     BOOST_GIL_EXTERNAL_LIB,
     (( ALWAYS, Gdiplus::Status, WINAPI, GdiplusStartup     , ( ULONG_PTR * )( const Gdiplus::GdiplusStartupInput * )( Gdiplus::GdiplusStartupOutput * )                                                    ))
     (( ALWAYS, VOID           , WINAPI, GdiplusShutdown    , ( ULONG_PTR )                                                                                                                                 ))
-    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromStreamICM ), ( IStream * )( Gdiplus::GpBitmap ** )                                                                                                         ))
-    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromFileICM   ), ( GDIPCONST WCHAR* )( Gdiplus::GpBitmap ** )                                                                                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipDisposeImage              ), ( Gdiplus::GpImage  * )                                                                                                                        ))
-    (( ALWAYS, GP_FUNCTION( GdipGetImageDimension         ), ( Gdiplus::GpImage  * )( Gdiplus::REAL * )( Gdiplus::REAL * )                                                                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipGetImagePixelFormat       ), ( Gdiplus::GpImage  * )( Gdiplus::PixelFormat * )                                                                                              ))
-    (( ALWAYS, GP_FUNCTION( GdipBitmapLockBits            ), ( Gdiplus::GpBitmap * )( GDIPCONST Gdiplus::GpRect* )( UINT )( Gdiplus::PixelFormat )( Gdiplus::BitmapData* )                                  ))
-    (( ALWAYS, GP_FUNCTION( GdipBitmapUnlockBits          ), ( Gdiplus::GpBitmap * )( Gdiplus::BitmapData* )                                                                                                ))
-    (( ALWAYS, GP_FUNCTION( GdipSaveImageToFile           ), ( Gdiplus::GpImage  * )( GDIPCONST WCHAR* )( GDIPCONST CLSID* )( GDIPCONST Gdiplus::EncoderParameters* )                                       ))
-    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromScan0     ), ( INT )( INT )( INT )( Gdiplus::PixelFormat )( BYTE * )( Gdiplus::GpBitmap** )                                                                ))
-    (( GP1_1 , GP_FUNCTION( GdipInitializePalette         ), ( OUT Gdiplus::ColorPalette * )( Gdiplus::PaletteType )( INT )( BOOL )( Gdiplus::GpBitmap * )                                                 ))
-    (( GP1_1 , GP_FUNCTION( GdipBitmapConvertFormat       ), ( IN Gdiplus::GpBitmap * )( Gdiplus::PixelFormat )( Gdiplus::DitherType )( Gdiplus::PaletteType )( Gdiplus::ColorPalette * )( Gdiplus::REAL ) ))
+    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromStream ), ( IStream * )( Gdiplus::GpBitmap ** )                                                                                                         ))
+    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromFile   ), ( GDIPCONST WCHAR* )( Gdiplus::GpBitmap ** )                                                                                                  ))
+    (( ALWAYS, GP_FUNCTION( GdipDisposeImage           ), ( Gdiplus::GpImage  * )                                                                                                                        ))
+    (( ALWAYS, GP_FUNCTION( GdipGetImageDimension      ), ( Gdiplus::GpImage  * )( Gdiplus::REAL * )( Gdiplus::REAL * )                                                                                  ))
+    (( ALWAYS, GP_FUNCTION( GdipGetImagePixelFormat    ), ( Gdiplus::GpImage  * )( Gdiplus::PixelFormat * )                                                                                              ))
+    (( ALWAYS, GP_FUNCTION( GdipBitmapLockBits         ), ( Gdiplus::GpBitmap * )( GDIPCONST Gdiplus::GpRect* )( UINT )( Gdiplus::PixelFormat )( Gdiplus::BitmapData* )                                  ))
+    (( ALWAYS, GP_FUNCTION( GdipBitmapUnlockBits       ), ( Gdiplus::GpBitmap * )( Gdiplus::BitmapData* )                                                                                                ))
+    (( ALWAYS, GP_FUNCTION( GdipSaveImageToFile        ), ( Gdiplus::GpImage  * )( GDIPCONST WCHAR* )( GDIPCONST CLSID* )( GDIPCONST Gdiplus::EncoderParameters* )                                       ))
+    (( ALWAYS, GP_FUNCTION( GdipCreateBitmapFromScan0  ), ( INT )( INT )( INT )( Gdiplus::PixelFormat )( BYTE * )( Gdiplus::GpBitmap** )                                                                ))
+    (( GP1_1 , GP_FUNCTION( GdipInitializePalette      ), ( OUT Gdiplus::ColorPalette * )( Gdiplus::PaletteType )( INT )( BOOL )( Gdiplus::GpBitmap * )                                                 ))
+    (( GP1_1 , GP_FUNCTION( GdipBitmapConvertFormat    ), ( IN Gdiplus::GpBitmap * )( Gdiplus::PixelFormat )( Gdiplus::DitherType )( Gdiplus::PaletteType )( Gdiplus::ColorPalette * )( Gdiplus::REAL ) ))
 );
 
 #undef ALWAYS
