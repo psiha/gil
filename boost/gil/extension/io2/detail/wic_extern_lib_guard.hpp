@@ -21,9 +21,13 @@
 
 #include <boost/preprocessor/comparison/greater.hpp>
 
+#include <cstdint>
+
 #if defined( _STDINT ) && !defined( _INTSAFE_H_INCLUDED_ )
     #define _INTSAFE_H_INCLUDED_
 #endif
+#define COM_NO_WINDOWS_H
+#include "objbase.h"
 #include "wincodec.h"
 //------------------------------------------------------------------------------
 namespace boost

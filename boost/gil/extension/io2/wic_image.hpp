@@ -20,9 +20,16 @@
 #define wic_image_hpp__78D710F7_11C8_4023_985A_22B180C9A476
 //------------------------------------------------------------------------------
 #include "detail/io_error.hpp"
+#include "detail/libx_shared.hpp" //...zzz...
 #include "detail/wic_extern_lib_guard.hpp"
 #include "detail/windows_shared.hpp"
 #include "detail/windows_shared_istreams.hpp"
+#include "formatted_image.hpp"
+
+#include <boost/mpl/vector_c.hpp> //...missing from metafuncitons.hpp...
+#include "boost/gil/metafunctions.hpp"
+#include "boost/gil/rgb.hpp"
+#include "boost/gil/typedefs.hpp"
 
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>
@@ -30,8 +37,6 @@
 #include <boost/range/iterator_range.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/type_traits/is_pod.hpp>
-
-#include "wincodec.h"
 
 #include <algorithm>
 //------------------------------------------------------------------------------

@@ -484,7 +484,9 @@ private:
         BOOST_ASSERT( !dimensions_mismatch( view ) );
         //BOOST_ASSERT( !formats_mismatch   ( view ) );
 
+        using namespace detail ;
         using namespace Gdiplus;
+
         point2<std::ptrdiff_t> const & targetDimensions( original_view( view ).dimensions() );
         gp_roi const roi( get_offset<gp_roi::offset_t>( view ), targetDimensions.x, targetDimensions.y );
         BitmapData bitmapData;
