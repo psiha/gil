@@ -19,7 +19,6 @@
 #ifndef shared_hpp__DA4F9174_EBAA_43E8_BEDD_A273BBA88CE7
 #define shared_hpp__DA4F9174_EBAA_43E8_BEDD_A273BBA88CE7
 //------------------------------------------------------------------------------
-#include <boost/range/iterator_range.hpp>
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -45,10 +44,6 @@ namespace detail
 
 //------------------------------------------------------------------------------
 } // namespace detail
-
-typedef iterator_range<unsigned char const *> memory_chunk_t;
-typedef iterator_range<unsigned char       *> writable_memory_chunk_t;
-
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

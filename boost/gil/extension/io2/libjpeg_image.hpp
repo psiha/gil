@@ -423,10 +423,11 @@ struct formatted_image_traits<libjpeg_image>
     template <class View>
     struct is_supported : mpl::bool_<view_to_native_format::apply<View>::value != JCS_UNKNOWN> {};
 
-    typedef mpl::map2
+    typedef mpl::map3
             <
-                mpl::pair<FILE       &, libjpeg_image>,
-                mpl::pair<char const *, libjpeg_image>
+                mpl::pair<memory_chunk_t const &, detail::seekable_input_memory_range_extender<libjpeg_image> >,
+                mpl::pair<FILE                 &,                                              libjpeg_image  >,
+                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libjpeg_image> >
             > readers;
 
     typedef mpl::map2
@@ -536,6 +537,20 @@ public:
     //}
 
 public: /// \ingroup Construction
+    explicit libjpeg_image( memory_chunk_t & memory_chunk )
+        :
+        libjpeg_base( for_decompressor() )
+    {
+        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+            if ( setjmp( error_handler_target() ) )
+                throw_jpeg_error();
+        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+
+        setup_source( memory_chunk );
+
+        read_header();
+    }
+
     explicit libjpeg_image( FILE & file )
         :
         libjpeg_base( for_decompressor() )
@@ -546,22 +561,6 @@ public: /// \ingroup Construction
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         setup_source( file );
-
-        read_header();
-    }
-
-    explicit libjpeg_image( char const * const file_name )
-        :
-        libjpeg_base( for_decompressor() )
-    {
-        BOOST_ASSERT( file_name );
-
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( error_handler_target() ) )
-                throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-
-        setup_source( file_name );
 
         read_header();
     }
@@ -621,6 +620,8 @@ private: // Private interface for the base formatted_image<> class.
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
+        using namespace detail;
+
         typedef typename MyView::value_type pixel_t;
         std::size_t         const scanline_length  ( decompressor().image_width * decompressor().num_components );
         scoped_ptr<JSAMPLE> const p_scanline_buffer( new JSAMPLE[ scanline_length ] );
@@ -651,8 +652,10 @@ private: // Private interface for the base formatted_image<> class.
         {
             read_scanline( scanline );
 
-            pixel_t const *                 p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( scanline ) );
-            typename TargetView::x_iterator p_target_pixel( view.row_begin( scanline_index )                    );
+            typedef typename get_original_view_t<TargetView>::type::x_iterator target_x_iterator;
+
+            pixel_t const *   p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( scanline ) );
+            target_x_iterator p_target_pixel( original_view( view ).row_begin( scanline_index )   );
             while ( p_source_pixel < gil_reinterpret_cast_c<pixel_t const *>( scanlineEnd ) )
             {
                 converter( *p_source_pixel, *p_target_pixel );
@@ -797,11 +800,24 @@ private:
     // Unextracted "libjpeg_reader" interface.
     void setup_source()
     {
-        source_manager_.next_input_byte = read_buffer_.begin();
-        source_manager_.bytes_in_buffer = 0;
-
         BOOST_ASSERT( decompressor().src == NULL );
         decompressor().src = &source_manager_;
+    }
+
+    void setup_source( memory_chunk_t & memory_chunk )
+    {
+        setup_source();
+
+        decompressor().client_data = &memory_chunk;
+
+        source_manager_.next_input_byte = memory_chunk.begin();
+        source_manager_.bytes_in_buffer = memory_chunk.size ();
+
+        source_manager_.init_source       = &init_memory_chunk_source;
+        source_manager_.fill_input_buffer = &fill_memory_chunk_buffer;
+        source_manager_.skip_input_data   = &skip_memory_chunk_data  ;
+        source_manager_.resync_to_restart = &jpeg_resync_to_restart  ;
+        source_manager_.term_source       = &term_memory_chunk_source;
     }
 
     void setup_source( FILE & file )
@@ -810,6 +826,9 @@ private:
 
         decompressor().client_data = &file;
 
+        source_manager_.next_input_byte = read_buffer_.begin();
+        source_manager_.bytes_in_buffer = 0;
+
         source_manager_.init_source       = &init_FILE_source      ;
         source_manager_.fill_input_buffer = &fill_FILE_buffer      ;
         source_manager_.skip_input_data   = &skip_FILE_data        ;
@@ -817,14 +836,6 @@ private:
         source_manager_.term_source       = &term_FILE_source      ;
     }
 
-    void setup_source( char const * const p_file_name )
-    {
-        FILE * const p_file( /*std*/::fopen( p_file_name, "rb" ) );
-        if ( !p_file )
-            throw_jpeg_error();
-        setup_source( *p_file );
-        source_manager_.term_source = &term_and_close_FILE_source;
-    }
 
     static void __cdecl init_FILE_source( j_decompress_ptr const p_cinfo )
     {
@@ -883,7 +894,7 @@ private:
         }
     }
 
-    static void __cdecl term_FILE_source( j_decompress_ptr  /*p_cinfo*/ )
+    static void __cdecl term_FILE_source( j_decompress_ptr /*p_cinfo*/ )
     {
     }
 
@@ -892,6 +903,70 @@ private:
     {
         term_FILE_source( p_cinfo );
         BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( reader( p_cinfo ).decompressor().client_data ) ) == 0 );
+    }
+
+    static void __cdecl init_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
+    {
+    }
+
+    static boolean __cdecl fill_memory_chunk_buffer( j_decompress_ptr const p_cinfo )
+    {
+        libjpeg_image & reader( reader( p_cinfo ) );
+
+        memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( reader.decompressor().client_data ) );
+
+        std::size_t const read_size
+        (
+            std::min<std::size_t>
+            (
+                reader.read_buffer_.size(),
+                memory_chunk       .size()
+            )
+        );
+
+        std::memcpy( reader.read_buffer_.begin(), memory_chunk.begin(), read_size );
+        memory_chunk.advance_begin( read_size );
+
+        if ( read_size != 0 )
+        {
+            reader.source_manager_.next_input_byte = memory_chunk.begin();
+            reader.source_manager_.bytes_in_buffer = read_size;
+        }
+        else
+        {
+            // Insert a fake EOI marker (see the comment for the default library
+            // implementation).
+            static unsigned char const fake_eoi[ 2 ] = { 0xFF, JPEG_EOI };
+            reader.source_manager_.next_input_byte = fake_eoi;
+            reader.source_manager_.bytes_in_buffer = 2;
+        }
+
+        return true;
+    }
+
+    static void __cdecl skip_memory_chunk_data( j_decompress_ptr const p_cinfo, long num_bytes )
+    {
+        libjpeg_image & reader( reader( p_cinfo ) );
+
+        if ( static_cast<std::size_t>( num_bytes ) <= reader.source_manager_.bytes_in_buffer )
+        {
+            reader.source_manager_.next_input_byte += num_bytes;
+            reader.source_manager_.bytes_in_buffer -= num_bytes;
+        }
+        else
+        {
+            memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( reader.decompressor().client_data ) );
+
+            num_bytes -= reader.source_manager_.bytes_in_buffer;
+            BOOST_ASSERT( num_bytes <= memory_chunk.size() ); //...failure?
+            memory_chunk.advance_begin( num_bytes );
+            reader.source_manager_.next_input_byte = memory_chunk.begin();
+            reader.source_manager_.bytes_in_buffer = 0;
+        }
+    }
+
+    static void __cdecl term_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
+    {
     }
 
     static libjpeg_image & reader(  j_decompress_ptr const p_cinfo )
@@ -903,7 +978,7 @@ private:
 
 private:
     jpeg_source_mgr     source_manager_;
-    array<JOCTET, 4096> read_buffer_   ;
+    array<JOCTET, 4096> read_buffer_   ;//...zzz...extract to a wrapper...not needed for in memory sources...
 };
 
 #if defined(BOOST_MSVC)

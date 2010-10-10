@@ -21,6 +21,7 @@
 //------------------------------------------------------------------------------
 #include "../../../utilities.hpp"
 #include "io_error.hpp"
+#include "memory_mapping.hpp"
 
 #include "boost/assert.hpp"
 #include "boost/noncopyable.hpp"
@@ -104,7 +105,7 @@ private:
 class c_file_input_guard : public c_file_guard
 {
 public:
-    c_file_input_guard( char const * const file_name ) : c_file_guard( file_name, "rb" ) {}
+    explicit c_file_input_guard( char const * const file_name ) : c_file_guard( file_name, "rb" ) {}
 };
 
 
@@ -117,7 +118,39 @@ public:
 class c_file_output_guard : public c_file_guard
 {
 public:
-    c_file_output_guard( char const * const file_name ) : c_file_guard( file_name, "wb" ) {}
+    explicit c_file_output_guard( char const * const file_name ) : c_file_guard( file_name, "wb" ) {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class mapped_input_file_guard
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class mapped_input_file_guard : private memory_mapped_source
+{
+public:
+    explicit mapped_input_file_guard( char const * const file_name )
+        :
+        memory_mapped_source( map_read_only_file( file_name )      ),
+        mutable_range_      ( memory_mapped_source::memory_range() )
+    {
+        io_error_if( memory_range().empty(), "File open failure" );
+    }
+
+    ~mapped_input_file_guard()
+    {
+        // Verify that the image class did not 'walk outside' the mapped range.
+        BOOST_ASSERT( mutable_range_.begin() <= mutable_range_.end  () );
+        BOOST_ASSERT( mutable_range_.begin() >= memory_range().begin() );
+        BOOST_ASSERT( mutable_range_.end  () <= memory_range().end  () );
+    }
+
+    memory_chunk_t & get() { return mutable_range_; }
+
+private:
+    memory_chunk_t mutable_range_;
 };
 
 
@@ -170,6 +203,52 @@ public:
         :
         c_file_output_guard ( file_path               ),
         c_file_capable_class( c_file_guard::get(), a2 )
+    {}
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class input_c_str_for_mmap_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from memory_chunk_t
+/// objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+//...zzz...add another layer of utility templates to kill this duplication...
+template <class mmap_capable_class>
+class input_c_str_for_mmap_extender
+    :
+    private mapped_input_file_guard,
+    public  mmap_capable_class
+{
+public:
+    input_c_str_for_mmap_extender( char const * const file_path )
+        :
+        mapped_input_file_guard( file_path                      ),
+        mmap_capable_class     ( mapped_input_file_guard::get() )
+    {}
+};
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class seekable_input_memory_range_extender
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class in_memory_capable_class>
+class seekable_input_memory_range_extender
+    :
+    private memory_chunk_t,
+    public  in_memory_capable_class
+{
+public:
+    explicit seekable_input_memory_range_extender( memory_chunk_t const & memory_range )
+        :
+        memory_chunk_t         ( memory_range                           ),
+        in_memory_capable_class( static_cast<memory_chunk_t &>( *this ) )
     {}
 };
 

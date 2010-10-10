@@ -18,7 +18,7 @@
 #ifndef windows_shared_hpp__9337A434_D2F6_43F2_93C8_4CE66C07B74D
 #define windows_shared_hpp__9337A434_D2F6_43F2_93C8_4CE66C07B74D
 //------------------------------------------------------------------------------
-#include "shared.hpp"
+#include "windows_shared_istreams.hpp"
 
 #include "boost/array.hpp"
 #include "boost/assert.hpp"

@@ -213,8 +213,6 @@ private:
 ///
 /// \class libpng_base
 ///
-/// \brief
-///
 ////////////////////////////////////////////////////////////////////////////////
 
 class libpng_base : public lib_object_t
@@ -230,6 +228,7 @@ protected:
         lib_object_t( p_png, ::png_create_info_struct( p_png ) )
     {}
 
+    //...zzz...forced by LibPNG into either duplication or this anti-pattern...
     bool successful_creation() const { return is_valid(); }
 
     static std::size_t format_bit_depth( libpng_view_data_t::format_t const format )
@@ -392,15 +391,16 @@ struct formatted_image_traits<libpng_image>
     template <class View>
     struct is_supported : detail::is_view_supported<View> {};
 
-    typedef mpl::map2
+    typedef mpl::map3
             <
-                mpl::pair<FILE       &,                                   libpng_image  >,
-                mpl::pair<char const *, detail::input_c_str_for_c_file_extender<libpng_image> >
+                mpl::pair<memory_chunk_t const &, detail::seekable_input_memory_range_extender<libpng_image> >,
+                mpl::pair<FILE                 &,                                              libpng_image  >,
+                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libpng_image> >
             > readers;
 
     typedef mpl::map2
             <
-                mpl::pair<FILE       &,                                   detail::libpng_writer_FILE  >,
+                mpl::pair<FILE       &,                                          detail::libpng_writer_FILE  >,
                 mpl::pair<char const *, detail::output_c_str_for_c_file_extender<detail::libpng_writer_FILE> >
             > writers;
 
@@ -488,10 +488,22 @@ public: /// \ingroup Construction
             cleanup_and_throw_libpng_error();
 
         #ifdef PNG_NO_STDIO
-            ::png_set_read_fn( &png_object(), &file, &png_read_data );
+            ::png_set_read_fn( &png_object(), &file, &png_FILE_read_data );
         #else
             ::png_init_io( &png_object(), &file );
         #endif
+
+        init();
+    }
+
+    explicit libpng_image( memory_chunk_t & in_memory_image )
+        :
+        libpng_base( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
+    {
+        if ( !successful_creation() )
+            cleanup_and_throw_libpng_error();
+        //png_rw_ptr
+        ::png_set_read_fn( &png_object(), &in_memory_image, &png_memory_chunk_read_data );
 
         init();
     }
@@ -692,9 +704,10 @@ private:
         ::png_read_row( &png_object(), p_row, NULL );
     }
 
-    static void PNGAPI png_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
+    static void PNGAPI png_FILE_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
     {
-        BOOST_ASSERT( png_ptr );
+        BOOST_ASSERT( png_ptr         );
+        BOOST_ASSERT( png_ptr->io_ptr );
 
         png_size_t const read_size
         (
@@ -702,6 +715,22 @@ private:
         );
 
         if ( read_size != length )
+            detail::png_error_function( png_ptr, "Read Error" );
+    }
+
+    static void PNGAPI png_memory_chunk_read_data( png_structp const png_ptr, png_bytep const data, png_size_t const length )
+    {
+        BOOST_ASSERT( png_ptr         );
+        BOOST_ASSERT( png_ptr->io_ptr );
+
+        memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( png_ptr->io_ptr ) );
+
+        if ( length <= static_cast<std::size_t>( memory_chunk.size() ) )
+        {
+            std::memcpy( data, memory_chunk.begin(), length );
+            memory_chunk.advance_begin( length );
+        }
+        else
             detail::png_error_function( png_ptr, "Read Error" );
     }
 };

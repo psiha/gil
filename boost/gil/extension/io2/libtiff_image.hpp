@@ -198,10 +198,58 @@ inline toff_t FILE_size_proc( thandle_t const fd )
 
 inline int FILE_map_proc( thandle_t /*handle*/, tdata_t * /*pbase*/, toff_t * /*psize*/ )
 {
-    return 0;
+    return false;
 }
 
 inline void FILE_unmap_proc( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*size*/ )
+{
+}
+
+
+inline tsize_t memory_read_proc( thandle_t /*handle*/, tdata_t /*buf*/, tsize_t /*size*/ )
+{
+    BOOST_ASSERT( !"Should not get called." );
+    __assume( false );
+    return 0;
+}
+
+inline tsize_t memory_write_proc( thandle_t /*handle*/, tdata_t /*buf*/, tsize_t /*size*/ )
+{
+    BOOST_ASSERT( !"Should not get called." );
+    __assume( false );
+    return 0;
+}
+
+inline toff_t memory_seek_proc( thandle_t /*handle*/, toff_t /*off*/, int /*whence*/ )
+{
+    BOOST_ASSERT( !"Should not get called." );
+    __assume( false );
+    return 0;
+}
+
+inline int memory_close_proc( thandle_t /*handle*/ )
+{
+    return 0;
+}
+
+inline toff_t memory_size_proc( thandle_t /*handle*/ )
+{
+    BOOST_ASSERT( !"Should not get called." );
+    __assume( false );
+    return 0;
+}
+
+inline int memory_map_proc( thandle_t const handle, tdata_t * const pbase, toff_t * const psize )
+{
+    BOOST_ASSERT( handle );
+    BOOST_ASSERT( pbase  );
+    BOOST_ASSERT( psize  );
+    *pbase = static_cast<tdata_t>( const_cast<memory_chunk_t::value_type *>( gil_reinterpret_cast<memory_chunk_t *>( handle )->begin() ) );
+    *psize = gil_reinterpret_cast<memory_chunk_t *>( handle )->size ();
+    return true;
+}
+
+inline void memory_unmap_proc( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*size*/ )
 {
 }
 
@@ -307,6 +355,27 @@ protected:
                 &detail::FILE_size_proc,
                 &detail::FILE_map_proc,
                 &detail::FILE_unmap_proc
+        )
+    )
+    {
+        construction_check();
+    }
+
+    explicit libtiff_base( memory_chunk_t & in_memory_image )
+        :
+        p_tiff_
+    (
+        ::TIFFClientOpen
+        (
+            "", "M",
+                &in_memory_image,
+                &detail::memory_read_proc,
+                &detail::memory_write_proc,
+                &detail::memory_seek_proc,
+                &detail::memory_close_proc,
+                &detail::memory_size_proc,
+                &detail::memory_map_proc,
+                &detail::memory_unmap_proc
         )
     )
     {
@@ -516,9 +585,7 @@ private:
         unsigned const bits_per_sample     ( get_field<uint16>( TIFFTAG_BITSPERSAMPLE   ) );
         unsigned const sample_format       ( get_field<uint16>( TIFFTAG_SAMPLEFORMAT    ) );
         unsigned const planar_configuration( get_field<uint16>( TIFFTAG_PLANARCONFIG    ) );
-        //...mrmlj...
-        unsigned /*const*/ photometric         ( get_field<uint16>( TIFFTAG_PHOTOMETRIC     ) ); if ( photometric == PHOTOMETRIC_MINISWHITE ) photometric = PHOTOMETRIC_MINISBLACK;
-
+        unsigned const photometric         ( get_field<uint16>( TIFFTAG_PHOTOMETRIC     ) );
         unsigned const orientation         ( get_field<uint16>( TIFFTAG_ORIENTATION     ) );
 
         unsigned ink_set( 0 );

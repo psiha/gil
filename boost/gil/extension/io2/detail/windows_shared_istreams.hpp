@@ -19,7 +19,9 @@
 #ifndef windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 #define windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 //------------------------------------------------------------------------------
-#include "shared.hpp"
+#include "boost/gil/utilities.hpp"
+
+#include "boost/range/iterator_range.hpp"
 
 #include "objbase.h"
 #include "objidl.h"
@@ -27,6 +29,11 @@
 //------------------------------------------------------------------------------
 namespace boost
 {
+
+//...zzz...duplicated from memory_mapping.hpp...clean this up...
+typedef iterator_range<unsigned char const *> memory_chunk_t;
+typedef iterator_range<unsigned char       *> writable_memory_chunk_t;
+
 //------------------------------------------------------------------------------
 namespace gil
 {
@@ -304,8 +311,8 @@ private:
     }
 
 protected:
-    unsigned char     *       pCurrentPosition_;
-    writable_memory_chunk_t const memory_chunk_;
+    unsigned char           *       pCurrentPosition_;
+    writable_memory_chunk_t   const memory_chunk_    ;
 };
 
 

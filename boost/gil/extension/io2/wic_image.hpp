@@ -307,20 +307,19 @@ struct formatted_image_traits<wic_image>
 
     typedef mpl::map6
     <
-        mpl::pair<char                    const *,                                                    wic_image  >,
-        mpl::pair<wchar_t                 const *,                                                    wic_image  >,
-        mpl::pair<HANDLE                         ,                                                    wic_image  >,
-        mpl::pair<IStream                       &,                                                    wic_image  >,
-        mpl::pair<FILE                          &, detail::input_FILE_for_IStream_extender           <wic_image> >,
-        mpl::pair<writable_memory_chunk_t const &, detail::writable_memory_chunk_for_IStream_extender<wic_image> >
+        mpl::pair<char           const *,                                           wic_image  >,
+        mpl::pair<wchar_t        const *,                                           wic_image  >,
+        mpl::pair<HANDLE                ,                                           wic_image  >,
+        mpl::pair<IStream              &,                                           wic_image  >,
+        mpl::pair<FILE                 &, detail::input_FILE_for_IStream_extender  <wic_image> >,
+        mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<wic_image> >
     > readers;
 
-    typedef mpl::map4
+    typedef mpl::map3
     <
         mpl::pair<char           const *, detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
         mpl::pair<IStream              &,                                           detail::wic_writer  >,
-        mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >,
-        mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<detail::wic_writer> >
+        mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >
     > writers;
 
     typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
@@ -418,6 +417,7 @@ public:
         typedef point2<std::ptrdiff_t> result_t;
         aligned_storage<sizeof( result_t ), alignment_of<result_t>::value>::type placeholder;
         result_t & result( *gil_reinterpret_cast<result_t *>( placeholder.address() ) );
+        BOOST_STATIC_ASSERT( sizeof( result_t::value_type ) == sizeof( UINT ) );
         verify_result( frame_decoder().GetSize( gil_reinterpret_cast<UINT *>( &result.x ), gil_reinterpret_cast<UINT *>( &result.y ) ) );
         return result;
     }
