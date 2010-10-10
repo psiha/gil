@@ -194,9 +194,9 @@ class wic_writer : public configure_on_write_writer
 public:
     struct lib_object_t
     {
-        CComPtr<IWICBitmapFrameEncode>   p_frame_           ;
-        CComPtr<IWICBitmapEncoder    >   p_encoder_         ;
-        IPropertyBag2                  * p_frame_parameters_;
+        detail::com_scoped_ptr<IWICBitmapFrameEncode>   p_frame_           ;
+        detail::com_scoped_ptr<IWICBitmapEncoder    >   p_encoder_         ;
+        IPropertyBag2                                 * p_frame_parameters_;
     };
 
     lib_object_t & lib_object() { return lib_object_; }
@@ -249,8 +249,8 @@ public:
 private:
     void create_encoder( IStream & target, GUID const & format )
     {
-        ensure_result( wic_factory<>::singleton().CreateEncoder( format, NULL, &lib_object().p_encoder_ ) );
-        ensure_result( lib_object().p_encoder_->Initialize( &target, WICBitmapEncoderNoCache )            );
+        ensure_result( wic_factory::singleton().CreateEncoder( format, NULL, &lib_object().p_encoder_ ) );
+        ensure_result( lib_object().p_encoder_->Initialize( &target, WICBitmapEncoderNoCache )          );
         ensure_result( lib_object().p_encoder_->CreateNewFrame( &lib_object().p_frame_, &lib_object().p_frame_parameters_ ) );
     }
 
@@ -354,8 +354,8 @@ public:
     //                                        (26.07.2010.) (Domagoj Saric)
     typedef std::pair
             <
-                CComPtr<IWICBitmapFrameDecode>,
-                CComPtr<IWICBitmapDecoder    >
+                detail::com_scoped_ptr<IWICBitmapFrameDecode>,
+                detail::com_scoped_ptr<IWICBitmapDecoder    >
             > lib_object_t;
 
     typedef detail::wic_user_guard guard;
@@ -376,14 +376,14 @@ public:
     explicit wic_image( IStream & stream )
     {
         using namespace detail;
-        ensure_result( wic_factory<>::singleton().CreateDecoderFromStream( &stream, NULL, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
+        ensure_result( wic_factory::singleton().CreateDecoderFromStream( &stream, NULL, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
         create_first_frame_decoder();
     }
 
     explicit wic_image( HANDLE const file_handle )
     {
         using namespace detail;
-        ensure_result( wic_factory<>::singleton().CreateDecoderFromFileHandle( reinterpret_cast<ULONG_PTR>( file_handle ), NULL, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
+        ensure_result( wic_factory::singleton().CreateDecoderFromFileHandle( reinterpret_cast<ULONG_PTR>( file_handle ), NULL, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
         create_first_frame_decoder();
     }
 
@@ -395,7 +395,7 @@ public:
     //{
     //    ensure_result
     //    (
-    //        wic_factory<>::singleton().CreateBitmapFromMemory
+    //        wic_factory::singleton().CreateBitmapFromMemory
     //        (
     //            view.width(),
     //            view.height(),
@@ -425,11 +425,11 @@ public:
     static std::size_t format_size( format_t /*const*/ format )
     {
         using namespace detail;
-        CComQIPtr<IWICComponentInfo> p_component_info;
-        ensure_result( wic_factory<>::singleton().CreateComponentInfo( format, &p_component_info ) );
-        //CComQIPtr<IWICPixelFormatInfo> p_pixel_format_info;
-        //p_component_info->QueryInterface( );(IID_IWICPixelFormatInfo
-        CComQIPtr<IWICPixelFormatInfo> const p_pixel_format_info( p_component_info );
+        com_scoped_ptr<IWICComponentInfo> p_component_info;
+        ensure_result( wic_factory::singleton().CreateComponentInfo( format, &p_component_info ) );
+        //com_scoped_ptr<IWICPixelFormatInfo> p_pixel_format_info;
+        //p_component_info->QueryInterface( );IID_IWICPixelFormatInfo
+        com_scoped_ptr<IWICPixelFormatInfo> const p_pixel_format_info( *p_component_info );
         io_error_if_not( p_pixel_format_info, "WIC failure" );
         unsigned int bits_per_pixel;
         verify_result( p_pixel_format_info->GetBitsPerPixel( &bits_per_pixel ) );
@@ -466,9 +466,9 @@ private: // Private formatted_image_base interface.
         //...non template related code yet to be extracted...
         point2<std::ptrdiff_t> const & targetDimensions( original_view( view ).dimensions() );
         wic_roi const roi( get_offset<wic_roi::offset_t>( view ), targetDimensions.x, targetDimensions.y );
-        CComQIPtr<IWICBitmap> p_bitmap;
-        ensure_result( wic_factory<>::singleton().CreateBitmapFromSourceRect( &frame_decoder(), roi.X, roi.Y, roi.Width, roi.Height, &p_bitmap ) );
-        CComQIPtr<IWICBitmapLock> p_bitmap_lock;
+        com_scoped_ptr<IWICBitmap> p_bitmap;
+        ensure_result( wic_factory::singleton().CreateBitmapFromSourceRect( &frame_decoder(), roi.X, roi.Y, roi.Width, roi.Height, &p_bitmap ) );
+        com_scoped_ptr<IWICBitmapLock> p_bitmap_lock;
         ensure_result( p_bitmap->Lock( &roi, WICBitmapLockRead, &p_bitmap_lock ) );
         unsigned int buffer_size;
         BYTE * p_buffer;
@@ -499,8 +499,8 @@ private: // Private formatted_image_base interface.
     {
         BOOST_ASSERT( view_data.format_ != GUID_WICPixelFormatUndefined ); //...zzz...
         using namespace detail;
-        CComQIPtr<IWICFormatConverter> p_converter;
-        ensure_result( wic_factory<>::singleton().CreateFormatConverter( &p_converter ) );
+        com_scoped_ptr<IWICFormatConverter> p_converter;
+        ensure_result( wic_factory::singleton().CreateFormatConverter( &p_converter ) );
         ensure_result( p_converter->Initialize( &frame_decoder(), view_data.format_, WICBitmapDitherTypeNone, NULL, 0, WICBitmapPaletteTypeCustom ) );
         ensure_result
         (
@@ -536,7 +536,7 @@ private:
     void create_decoder_from_filename( wchar_t const * const filename )
     {
         using namespace detail;
-        ensure_result( wic_factory<>::singleton().CreateDecoderFromFilename( filename, NULL, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
+        ensure_result( wic_factory::singleton().CreateDecoderFromFilename( filename, NULL, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &lib_object().second ) );
         create_first_frame_decoder();
     }
 
