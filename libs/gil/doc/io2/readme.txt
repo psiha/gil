@@ -6,9 +6,8 @@ This is an attempt at an alternate GIL.IO implementation that
 - provides adaptors for image/bitmap classes from popular GUI frameworks that turn them into GIL Image/View concepts
 - has other generic improvements in the fields of space/time efficiency and code bloat reduction.
 
-Currently this (alternate) code is based on original code from the
-Boost.GIL.IO official 1.42 release.
+Currently this (alternate) code is based on original Boost.GIL.IO code from the Boost trunk.
 
-Development is currently being done with MSVC++ 9.0 SP1 so no jamfiles are provided yet.
+Development is currently being done with MSVC++ 10.0 so no jamfiles are provided yet.
 
 You can contact me/"the author" at dsaritz at gmail.com.
