@@ -909,38 +909,10 @@ private:
     {
     }
 
-    static boolean __cdecl fill_memory_chunk_buffer( j_decompress_ptr const p_cinfo )
+    static boolean __cdecl fill_memory_chunk_buffer( j_decompress_ptr /*p_cinfo*/ )
     {
-        libjpeg_image & reader( reader( p_cinfo ) );
-
-        memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( reader.decompressor().client_data ) );
-
-        std::size_t const read_size
-        (
-            std::min<std::size_t>
-            (
-                reader.read_buffer_.size(),
-                memory_chunk       .size()
-            )
-        );
-
-        std::memcpy( reader.read_buffer_.begin(), memory_chunk.begin(), read_size );
-        memory_chunk.advance_begin( read_size );
-
-        if ( read_size != 0 )
-        {
-            reader.source_manager_.next_input_byte = memory_chunk.begin();
-            reader.source_manager_.bytes_in_buffer = read_size;
-        }
-        else
-        {
-            // Insert a fake EOI marker (see the comment for the default library
-            // implementation).
-            static unsigned char const fake_eoi[ 2 ] = { 0xFF, JPEG_EOI };
-            reader.source_manager_.next_input_byte = fake_eoi;
-            reader.source_manager_.bytes_in_buffer = 2;
-        }
-
+        BOOST_ASSERT( !"Should not get called." );
+        __assume( false );
         return true;
     }
 
@@ -948,21 +920,9 @@ private:
     {
         libjpeg_image & reader( reader( p_cinfo ) );
 
-        if ( static_cast<std::size_t>( num_bytes ) <= reader.source_manager_.bytes_in_buffer )
-        {
-            reader.source_manager_.next_input_byte += num_bytes;
-            reader.source_manager_.bytes_in_buffer -= num_bytes;
-        }
-        else
-        {
-            memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( reader.decompressor().client_data ) );
-
-            num_bytes -= reader.source_manager_.bytes_in_buffer;
-            BOOST_ASSERT( num_bytes <= memory_chunk.size() ); //...failure?
-            memory_chunk.advance_begin( num_bytes );
-            reader.source_manager_.next_input_byte = memory_chunk.begin();
-            reader.source_manager_.bytes_in_buffer = 0;
-        }
+        BOOST_ASSERT( static_cast<std::size_t>( num_bytes ) <= reader.source_manager_.bytes_in_buffer );
+        reader.source_manager_.next_input_byte += num_bytes;
+        reader.source_manager_.bytes_in_buffer -= num_bytes;
     }
 
     static void __cdecl term_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
