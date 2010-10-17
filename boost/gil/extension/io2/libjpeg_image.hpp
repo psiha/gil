@@ -453,8 +453,8 @@ struct formatted_image_traits<libjpeg_image>
 
 class libjpeg_image
     :
-    public  detail::libjpeg_base,
-    public  detail::formatted_image<libjpeg_image>
+    public detail::libjpeg_base,
+    public detail::formatted_image<libjpeg_image>
 {
 public:
     struct guard {};
@@ -568,11 +568,20 @@ public: /// \ingroup Construction
 public:
     point2<std::ptrdiff_t> dimensions() const
     {
-        return point2<std::ptrdiff_t>( decompressor().image_width, decompressor().image_height );
+        // Implementation note:
+        //   A user might have setup output image scaling through the low-level
+        // lib_object accessor.
+        //                                    (17.10.2010.) (Domagoj Saric)
+        if ( dirty_output_dimensions_ )
+        {
+            jpeg_calc_output_dimensions( &const_cast<libjpeg_image &>( *this ).lib_object() );
+            dirty_output_dimensions_ = false;
+        }
+        return point2<std::ptrdiff_t>( decompressor().output_width, decompressor().output_height );
     }
 
-    jpeg_decompress_struct       & lib_object()       { return decompressor(); }
-    jpeg_decompress_struct const & lib_object() const { return const_cast<libjpeg_image &>( *this ).lib_object(); }
+    jpeg_decompress_struct       & lib_object()       { dirty_output_dimensions_ = true; return decompressor(); }
+    jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
 
 private: // Private interface for the base formatted_image<> class.
     friend base_t;
@@ -794,7 +803,20 @@ private:
     {
         BOOST_VERIFY( jpeg_read_header( &decompressor(), true ) == JPEG_HEADER_OK );
 
-        detail::io_error_if( decompressor().data_precision != 8, "Unsupported image file data precision." );
+        // Implementation note:
+        //   To enable users to setup output scaling we use the output
+        // dimensions to report the image dimensions in the dimensions() getter
+        // so we have to manually initialize them here.
+        //                                    (17.10.2010.) (Domagoj Saric)
+        BOOST_ASSERT( decompressor().output_width  == 0 );
+        BOOST_ASSERT( decompressor().output_height == 0 );
+
+        decompressor().output_width  = decompressor().image_width ;
+        decompressor().output_height = decompressor().image_height;
+
+        dirty_output_dimensions_ = false;
+
+        detail::io_error_if( decompressor().data_precision != BITS_IN_JSAMPLE, "Unsupported image file data precision." );
     }
 
     // Unextracted "libjpeg_reader" interface.
@@ -937,8 +959,9 @@ private:
     }
 
 private:
-    jpeg_source_mgr     source_manager_;
-    array<JOCTET, 4096> read_buffer_   ;//...zzz...extract to a wrapper...not needed for in memory sources...
+    jpeg_source_mgr     source_manager_         ;
+    array<JOCTET, 4096> read_buffer_            ;//...zzz...extract to a wrapper...not needed for in memory sources...
+    mutable bool        dirty_output_dimensions_;
 };
 
 #if defined(BOOST_MSVC)
