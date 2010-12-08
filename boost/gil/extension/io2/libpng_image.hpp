@@ -393,14 +393,14 @@ struct formatted_image_traits<libpng_image>
 
     typedef mpl::map3
             <
-                mpl::pair<memory_chunk_t const &, detail::seekable_input_memory_range_extender<libpng_image> >,
-                mpl::pair<FILE                 &,                                              libpng_image  >,
-                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libpng_image> >
+                mpl::pair<memory_chunk_t        , detail::seekable_input_memory_range_extender<libpng_image> >,
+                mpl::pair<FILE                  ,                                              libpng_image  >,
+                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender      <libpng_image> >
             > readers;
 
     typedef mpl::map2
             <
-                mpl::pair<FILE       &,                                          detail::libpng_writer_FILE  >,
+                mpl::pair<FILE        ,                                          detail::libpng_writer_FILE  >,
                 mpl::pair<char const *, detail::output_c_str_for_c_file_extender<detail::libpng_writer_FILE> >
             > writers;
 

@@ -425,14 +425,14 @@ struct formatted_image_traits<libjpeg_image>
 
     typedef mpl::map3
             <
-                mpl::pair<memory_chunk_t const &, detail::seekable_input_memory_range_extender<libjpeg_image> >,
-                mpl::pair<FILE                 &,                                              libjpeg_image  >,
+                mpl::pair<memory_chunk_t        , detail::seekable_input_memory_range_extender<libjpeg_image> >,
+                mpl::pair<FILE                  ,                                              libjpeg_image  >,
                 mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libjpeg_image> >
             > readers;
 
     typedef mpl::map2
             <
-                mpl::pair<FILE       &, detail::libjpeg_writer>,
+                mpl::pair<FILE        , detail::libjpeg_writer>,
                 mpl::pair<char const *, detail::libjpeg_writer>
             > writers;
 

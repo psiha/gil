@@ -315,16 +315,16 @@ struct formatted_image_traits<wic_image>
         mpl::pair<char           const *,                                           wic_image  >,
         mpl::pair<wchar_t        const *,                                           wic_image  >,
         mpl::pair<HANDLE                ,                                           wic_image  >,
-        mpl::pair<IStream              &,                                           wic_image  >,
-        mpl::pair<FILE                 &, detail::input_FILE_for_IStream_extender  <wic_image> >,
-        mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<wic_image> >
+        mpl::pair<IStream               ,                                           wic_image  >,
+        mpl::pair<FILE                  , detail::input_FILE_for_IStream_extender  <wic_image> >,
+        mpl::pair<memory_chunk_t        , detail::memory_chunk_for_IStream_extender<wic_image> >
     > readers;
 
     typedef mpl::map3
     <
-        mpl::pair<char           const *, detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
-        mpl::pair<IStream              &,                                           detail::wic_writer  >,
-        mpl::pair<FILE                 &, detail::output_FILE_for_IStream_extender <detail::wic_writer> >
+        mpl::pair<char    const *, detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
+        mpl::pair<IStream        ,                                           detail::wic_writer  >,
+        mpl::pair<FILE           , detail::output_FILE_for_IStream_extender <detail::wic_writer> >
     > writers;
 
     typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;

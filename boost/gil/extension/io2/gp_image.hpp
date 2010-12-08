@@ -280,21 +280,21 @@ struct formatted_image_traits<gp_image>
     struct is_supported : detail::is_supported<view_to_native_format::apply<View>::value> {};
 
     typedef mpl::map5
-        <
-            mpl::pair<char           const *,                                           gp_image  >,
-            mpl::pair<wchar_t        const *,                                           gp_image  >,
-            mpl::pair<IStream              &,                                           gp_image  >,
-            mpl::pair<FILE                 &, detail::input_FILE_for_IStream_extender  <gp_image> >,
-            mpl::pair<memory_chunk_t const &, detail::memory_chunk_for_IStream_extender<gp_image> >
-        > readers;
+    <
+        mpl::pair<char           const *,                                           gp_image  >,
+        mpl::pair<wchar_t        const *,                                           gp_image  >,
+        mpl::pair<IStream               ,                                           gp_image  >,
+        mpl::pair<FILE                  , detail::input_FILE_for_IStream_extender  <gp_image> >,
+        mpl::pair<memory_chunk_t        , detail::memory_chunk_for_IStream_extender<gp_image> >
+    > readers;
 
     typedef mpl::map4
-        <
-            mpl::pair<char           const *, detail::gp_writer>,
-            mpl::pair<wchar_t        const *, detail::gp_writer>,
-            mpl::pair<IStream              &, detail::gp_writer>,
-            mpl::pair<FILE                 &, detail::gp_writer>
-        > writers;
+    <
+        mpl::pair<char    const *, detail::gp_writer>,
+        mpl::pair<wchar_t const *, detail::gp_writer>,
+        mpl::pair<IStream        , detail::gp_writer>,
+        mpl::pair<FILE           , detail::gp_writer>
+    > writers;
 
     typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
 

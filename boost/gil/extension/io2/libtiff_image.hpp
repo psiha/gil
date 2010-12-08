@@ -499,13 +499,13 @@ struct formatted_image_traits<libtiff_image>
     typedef mpl::map2
     <
         mpl::pair<char const *, libtiff_image>,
-        mpl::pair<FILE       &, libtiff_image>
+        mpl::pair<FILE        , libtiff_image>
     > readers;
 
     typedef mpl::map2
     <
         mpl::pair<char const *, detail::libtiff_writer>,
-        mpl::pair<FILE       &, detail::libtiff_writer>
+        mpl::pair<FILE        , detail::libtiff_writer>
     > writers;
 
     typedef mpl::vector1_c<format_tag, tiff> supported_image_formats;
