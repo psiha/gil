@@ -414,8 +414,8 @@ protected:
             BOOST_ASSERT( my_dimensions.x == target_dimensions.x    );
         }
 
-        unsigned int const width ( zero_x_offset ? target_dimensions.x : std::min( my_dimensions.x - get_offset_x( offset_view.offset() ), target_dimensions.x ) );
-        unsigned int const height(                                       std::min( my_dimensions.y - get_offset_y( offset_view.offset() ), target_dimensions.y ) );
+        unsigned int const width ( zero_x_offset ? target_dimensions.x : (std::min)( my_dimensions.x - get_offset_x( offset_view.offset() ), target_dimensions.x ) );
+        unsigned int const height(                                       (std::min)( my_dimensions.y - get_offset_y( offset_view.offset() ), target_dimensions.y ) );
         
         return subimage_view( offset_view.original_view(), 0, 0, width, height );
     }
@@ -843,13 +843,19 @@ public: // Utility 'quick-wrappers'...
     template <class Source, class Image>
     static void read( Source const & target, Image & image )
     {
-        typename reader_for<typename decay<Source>::type>::type( target ).copy_to_image( image, synchronize_dimensions(), synchronize_formats() );
+        typedef typename reader_for<typename decay<Source>::type>::type reader_t;
+        // The backend does not know how to read from the specified source type.
+        BOOST_STATIC_ASSERT(( !is_same<reader_t, mpl::void_>::value ));
+        reader_t( target ).copy_to_image( image, synchronize_dimensions(), synchronize_formats() );
     }
 
     template <class Target, class View>
-    static void write( Target const & target, View const & view )
+    static void write( Target & target, View const & view )
     {
-        typename writer_for<typename decay<Target>::type>::type( target, view ).write_default();
+        typedef typename writer_for<typename decay<Target>::type>::type writer_t;
+        // The backend does not know how to write to the specified target type.
+        BOOST_STATIC_ASSERT(( !is_same<writer_t, mpl::void_>::value ));
+        writer_t( target, view ).write_default();
     }
 
 private:
