@@ -255,6 +255,78 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
+/// \class FileHandleStreamBase
+/// ---------------------------
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class __declspec( novtable ) FileHandleStreamBase : public StreamBase
+{
+protected:
+    FileHandleStreamBase( HANDLE const file ) : file_( file ) {}
+
+private:
+    HRESULT STDMETHODCALLTYPE Seek( LARGE_INTEGER const dlibMove, DWORD const dwOrigin, ULARGE_INTEGER * const plibNewPosition ) override
+    {
+        BOOST_STATIC_ASSERT( SEEK_SET == STREAM_SEEK_SET );
+        BOOST_STATIC_ASSERT( SEEK_CUR == STREAM_SEEK_CUR );
+        BOOST_STATIC_ASSERT( SEEK_END == STREAM_SEEK_END );
+
+        assert( ( dwOrigin >= SEEK_SET ) && ( dwOrigin <= SEEK_END ) );
+
+        BOOL const success( ::SetFilePointerEx( file_, dlibMove, reinterpret_cast<PLARGE_INTEGER>( plibNewPosition ), dwOrigin ) );
+        return success ? S_OK : S_FALSE;
+    }
+
+protected:
+    HANDLE const file_;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class FileHandleReadStream
+/// ---------------------------
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class FileHandleReadStream : public FileHandleStreamBase
+{
+public:
+    FileHandleReadStream( HANDLE const file ) : FileHandleStreamBase( file ) {}
+
+private:
+    HRESULT STDMETHODCALLTYPE Read( void * const pv, ULONG const cb, ULONG * const pcbRead ) override
+    {
+        BOOL const success( ::ReadFile( file_, pv, cb, pcbRead, NULL ) );
+        return success ? S_OK : S_FALSE;
+    }
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class FileWriteStream
+/// ----------------------
+///
+////////////////////////////////////////////////////////////////////////////////
+
+class FileHandleWriteStream : public FileHandleStreamBase
+{
+public:
+    FileHandleWriteStream( HANDLE const file ) : FileHandleStreamBase( file ) {}
+
+private:
+    HRESULT STDMETHODCALLTYPE Write( void const * const pv, ULONG const cb, ULONG * const pcbWritten ) override
+    {
+        BOOL const success( ::WriteFile( file_, pv, cb, pcbWritten, NULL ) );
+        return success ? S_OK : S_FALSE;
+    }
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
 /// \class MemoryStreamBase
 /// -----------------------
 ///

@@ -131,6 +131,58 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
+/// \class output_file_name_for_IStream_extender
+/// \internal
+/// \brief Helper wrapper for classes that can construct from IStream objects.
+///
+////////////////////////////////////////////////////////////////////////////////
+
+template <class IStream_capable_class>
+class __declspec( novtable ) output_file_name_for_IStream_extender
+    :
+    private FileHandleWriteStream,
+    public  IStream_capable_class
+{
+public:
+    output_file_name_for_IStream_extender( wchar_t const * const file_name )
+        :
+        FileHandleWriteStream( do_open( file_name )            ),
+        IStream_capable_class( static_cast<IStream &>( *this ) )
+    {}
+
+    template <typename A2> //...zzz...
+    output_file_name_for_IStream_extender( wchar_t const * const file_name, A2 const & a2 )
+        :
+        FileHandleWriteStream( do_open( file_name )                ),
+        IStream_capable_class( static_cast<IStream &>( *this ), a2 )
+    {}
+
+    ~output_file_name_for_IStream_extender() { BOOST_VERIFY( ::CloseHandle( file_ ) ); }
+
+private:
+    static HANDLE do_open( wchar_t const * const file_name )
+    {
+        HANDLE const handle
+        (
+            ::CreateFileW
+            (
+                file_name,
+                GENERIC_WRITE,
+                0,
+                0,
+                OPEN_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+                NULL
+            )
+        );
+        io_error_if_not( handle, "File open failure" );
+        return handle;
+    }
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+///
 /// \class memory_chunk_for_IStream_extender
 /// \internal
 /// \brief Helper wrapper for classes that can construct from IStream objects.

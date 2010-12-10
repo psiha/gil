@@ -322,9 +322,9 @@ struct formatted_image_traits<wic_image>
 
     typedef mpl::map3
     <
-        mpl::pair<char    const *, detail::output_c_str_for_c_file_extender<detail::output_FILE_for_IStream_extender <detail::wic_writer> > >,
-        mpl::pair<IStream        ,                                           detail::wic_writer  >,
-        mpl::pair<FILE           , detail::output_FILE_for_IStream_extender <detail::wic_writer> >
+        mpl::pair<wchar_t const *, detail::output_file_name_for_IStream_extender<detail::wic_writer> >,
+        mpl::pair<IStream        ,                                               detail::wic_writer  >,
+        mpl::pair<FILE           , detail::output_FILE_for_IStream_extender     <detail::wic_writer> >
     > writers;
 
     typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
