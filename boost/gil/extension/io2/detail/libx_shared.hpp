@@ -19,9 +19,9 @@
 #ifndef libx_shared_hpp__ABC7759A_4313_4BFF_B64F_D72BBF2355E8
 #define libx_shared_hpp__ABC7759A_4313_4BFF_B64F_D72BBF2355E8
 //------------------------------------------------------------------------------
-#include "../../../utilities.hpp"
 #include "io_error.hpp"
 #include "memory_mapping.hpp"
+#include "boost/gil/utilities.hpp"
 
 #include "boost/assert.hpp"
 #include "boost/noncopyable.hpp"
