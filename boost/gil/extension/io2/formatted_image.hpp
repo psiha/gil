@@ -537,6 +537,9 @@ public:
                     Target
                 >::type base_writer_t;
 
+        // The backend does not seem to provide a writer for the specified target...
+        BOOST_STATIC_ASSERT(( !is_same<base_writer_t, mpl::void_>::value ));
+
         typedef typename mpl::if_c
                 <
                     single_format,
