@@ -521,7 +521,11 @@ public:
 
     template <typename Source>
     struct reader_for
-        : public mpl::at<typename formatted_image_traits<Impl>::readers, Source> {};
+        : public mpl::at<typename formatted_image_traits<Impl>::readers, Source>
+    {
+        // The backend does not seem to provide a reader for the specified target...
+        BOOST_STATIC_ASSERT(( !is_same<typename reader_for<Source>::type, mpl::void_>::value ));
+    };
 
     template <typename Target>
     struct writer_for
@@ -581,7 +585,7 @@ private:
             :
             base ( image ),
             impl_( impl  )
-            {}
+        {}
 
         template <class Image>
         void apply() { impl_.copy_to( base::apply<Image>(), dimensions_policy(), formats_policy() ); }
