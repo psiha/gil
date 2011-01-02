@@ -19,11 +19,12 @@
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
 
+#include "detail/platform_specifics.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 
 #if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
-...error...libtiff support requires mpl vectors of size 35 or greater...
+    #error libtiff support requires mpl vectors of size 35 or greater...
 #endif
 
 #include <boost/array.hpp>
@@ -208,22 +209,19 @@ inline void FILE_unmap_proc( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*si
 
 inline tsize_t memory_read_proc( thandle_t /*handle*/, tdata_t /*buf*/, tsize_t /*size*/ )
 {
-    BOOST_ASSERT( !"Should not get called." );
-    __assume( false );
+    BF_UNREACHABLE_CODE
     return 0;
 }
 
 inline tsize_t memory_write_proc( thandle_t /*handle*/, tdata_t /*buf*/, tsize_t /*size*/ )
 {
-    BOOST_ASSERT( !"Should not get called." );
-    __assume( false );
+    BF_UNREACHABLE_CODE
     return 0;
 }
 
 inline toff_t memory_seek_proc( thandle_t /*handle*/, toff_t /*off*/, int /*whence*/ )
 {
-    BOOST_ASSERT( !"Should not get called." );
-    __assume( false );
+    BF_UNREACHABLE_CODE
     return 0;
 }
 
@@ -234,8 +232,7 @@ inline int memory_close_proc( thandle_t /*handle*/ )
 
 inline toff_t memory_size_proc( thandle_t /*handle*/ )
 {
-    BOOST_ASSERT( !"Should not get called." );
-    __assume( false );
+    BF_UNREACHABLE_CODE
     return 0;
 }
 
@@ -382,8 +379,7 @@ protected:
         construction_check();
     }
 
-    __declspec( nothrow )
-    ~libtiff_base()
+    BF_NOTHROW ~libtiff_base()
     {
         ::TIFFClose( &lib_object() );
     }
@@ -558,8 +554,6 @@ public:
         return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
     }
 
-    detail::full_format_t::format_bitfield const & format_bits() const { return format_.bits; }
-
 private:
     template <typename T>
     T get_field( ttag_t const tag ) const
@@ -619,6 +613,8 @@ private:
     }
 
 private:
+    detail::full_format_t::format_bitfield const & format_bits() const { return format_.bits; }
+
     static unsigned int round_up_divide( unsigned int const dividend, unsigned int const divisor )
     {
         return ( dividend + divisor - 1 ) / divisor;
@@ -1175,8 +1171,7 @@ private:
         generic_scanline_buffer_t const buffer_;
     };
 
-    __declspec( nothrow )
-    skip_row_results_t skip_to_row
+    skip_row_results_t BF_NOTHROWNOALIAS skip_to_row
     (
         unsigned int        const row_to_skip_to,
         unsigned int        const sample,
