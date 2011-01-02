@@ -247,8 +247,10 @@ mapping_flags mapping_flags::create
     if ( handle_access_flags & handle_access_rights::write )
         flags.create_mapping_flags *= 4;
     else
-    //if ( handle_access_flags & handle_access_rights::read )
+    {
+        BOOST_ASSERT( handle_access_flags & handle_access_rights::read );
         flags.create_mapping_flags *= 2;
+    }
 
     flags.create_mapping_flags |= system_hints;
 
@@ -328,8 +330,8 @@ memory_mapped_source::memory_mapped_source( guard::native_handle_t const object_
         mapping_flags::create
         (
             mapping_flags::handle_access_rights::read,
-            mapping_flags::share_mode::shared,
-            mapping_flags::system_hint::uninitialized
+            mapping_flags::share_mode          ::shared,
+            mapping_flags::system_hint         ::uninitialized
         ),
         desiredSize
     )
