@@ -131,12 +131,12 @@ typedef iterator_range<TCHAR const *> string_chunk_t;
     // Programmer errors:
     switch ( status )
     {
-        case Ok                        : BOOST_ASSERT( !"Should not be called for no error" ); __assume( false ); break;
-        case InvalidParameter          : BOOST_ASSERT( !"Invalid parameter"                 ); __assume( false ); break;
-        case WrongState                : BOOST_ASSERT( !"Object in wrong state"             ); __assume( false ); break;
-        case GdiplusNotInitialized     : BOOST_ASSERT( !"GDI+ not initialized"              ); __assume( false ); break;
+        case Ok                        : BOOST_ASSERT( !"Should not be called for no error" ); BF_UNREACHABLE_CODE break;
+        case InvalidParameter          : BOOST_ASSERT( !"Invalid parameter"                 ); BF_UNREACHABLE_CODE break;
+        case WrongState                : BOOST_ASSERT( !"Object in wrong state"             ); BF_UNREACHABLE_CODE break;
+        case GdiplusNotInitialized     : BOOST_ASSERT( !"GDI+ not initialized"              ); BF_UNREACHABLE_CODE break;
 
-        default: BOOST_ASSERT( !"Unknown GDI+ status code." ); __assume( false ); break;
+        default: BOOST_ASSERT( !"Unknown GDI+ status code." ); BF_UNREACHABLE_CODE break;
     }
 }
 
@@ -450,7 +450,7 @@ private: // Private formatted_image_base interface.
                 #endif // (GDIPVER >= 0x0110)
 
             default:
-                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
+                BF_UNREACHABLE_CODE
                 return PixelFormatUndefined;
         }
     }
@@ -472,7 +472,7 @@ private: // Private formatted_image_base interface.
             #endif
 
             default:
-                BOOST_ASSERT( !"Should not get reached." ); __assume( false );
+                BF_UNREACHABLE_CODE
                 return unsupported_format;
         }
     }

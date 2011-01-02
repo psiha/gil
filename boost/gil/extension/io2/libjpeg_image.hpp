@@ -522,7 +522,7 @@ public:
 
             default:
                 BOOST_ASSERT( !"Invalid or unknown format specified." );
-                __assume( false );
+                BF_UNREACHABLE_CODE
                 return 0;
         }
     }
@@ -933,8 +933,7 @@ private:
 
     static boolean __cdecl fill_memory_chunk_buffer( j_decompress_ptr /*p_cinfo*/ )
     {
-        BOOST_ASSERT( !"Should not get called." );
-        __assume( false );
+        BF_UNREACHABLE_CODE
         return true;
     }
 

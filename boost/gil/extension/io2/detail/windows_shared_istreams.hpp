@@ -19,6 +19,8 @@
 #ifndef windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 #define windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 //------------------------------------------------------------------------------
+#include "platform_specifics.hpp"
+
 #include "boost/gil/utilities.hpp"
 
 #include "boost/range/iterator_range.hpp"
@@ -378,7 +380,7 @@ private:
             case STREAM_SEEK_SET: return memory_chunk_.begin();
             case STREAM_SEEK_CUR: return pCurrentPosition_    ;
             case STREAM_SEEK_END: return memory_chunk_.end  ();
-            default: assert( false ); __assume( false );
+            default: BF_UNREACHABLE_CODE
         }
     }
 

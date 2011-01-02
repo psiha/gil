@@ -18,6 +18,7 @@
 #define libpng_image_hpp__9E0C99E6_EAE8_4D71_844B_93518FFCB5CE
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
+#include "detail/platform_specifics.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 #include "detail/shared.hpp"
@@ -173,7 +174,7 @@ public:
     {
         BOOST_ASSERT( p_png_ && "Call this only after ensuring creation success!" );
         png_struct & png( *p_png_ );
-        __assume( &png != 0 );
+        BF_ASSUME( &png != 0 );
         return png;
     }
 
@@ -181,7 +182,7 @@ public:
     {
         BOOST_ASSERT( p_png_ && "Call this only after ensuring creation success!" );
         png_info & info( *p_info_ );
-        __assume( &info != 0 );
+        BF_ASSUME( &info != 0 );
         return info;
     }
 
@@ -542,7 +543,7 @@ private: // Private formatted_image_base interface.
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         unsigned int number_of_passes( ::png_set_interlace_handling( &png_object() ) );
-        __assume( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
+        BF_ASSUME( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
         BOOST_ASSERT( ( number_of_passes == 1 ) && "Missing interlaced support for the generic conversion case." );
         ignore_unused_variable_warning( number_of_passes );
 
@@ -631,7 +632,7 @@ private: // Private formatted_image_base interface.
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         unsigned int number_of_passes( ::png_set_interlace_handling( &png_object() ) );
-        __assume( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
+        BF_ASSUME( ( number_of_passes == 1 ) || ( number_of_passes == 7 ) );
 
         skip_rows( view_data.offset_ );
 
@@ -689,7 +690,7 @@ private:
         unsigned int number_of_rows_to_skip( row_to_skip_to - png_object().row_number );
         while ( number_of_rows_to_skip-- )
         {
-            __assume( row_to_skip_to != 0 );
+            BF_ASSUME( row_to_skip_to != 0 );
             read_row( NULL );
         }
     }

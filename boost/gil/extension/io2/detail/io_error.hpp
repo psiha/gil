@@ -17,6 +17,8 @@
 #ifndef io_error_hpp__71ED3406_D77C_41FB_9981_A94A1D3BDC8A
 #define io_error_hpp__71ED3406_D77C_41FB_9981_A94A1D3BDC8A
 //------------------------------------------------------------------------------
+#include "platform_specifics.hpp"
+
 #include "boost/throw_exception.hpp"
 
 #include <exception>
@@ -31,8 +33,7 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-__declspec( noreturn noalias )
-inline void io_error   ( char const * const description )
+inline BF_NOTHROWNOALIAS void io_error( char const * const description )
 {
     #ifdef _MSC_VER
         throw_exception( std::exception( description , 0 ) ); // Assumes the description string is static/non-temporary

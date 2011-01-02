@@ -20,6 +20,7 @@
 #define formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 //------------------------------------------------------------------------------
 #include "format_tags.hpp"
+#include "detail/platform_specifics.hpp"
 #include "detail/io_error.hpp"
 #include "detail/switch.hpp"
 
@@ -474,7 +475,7 @@ protected:
         result_type operator()( Index const & ) const
         {
             BOOST_ASSERT( !"Default case must not have been reached!" );
-            __assume( false );
+            BF_UNREACHABLE_CODE
             return result_type();
         }
     };
@@ -642,8 +643,8 @@ private:
 
 private:
     // ...zzz...MSVC++ 10 generates code to check whether this == 0...investigate...
-    Impl       & impl()       { __assume( this != 0 ); return static_cast<Impl       &>( *this ); }
-    Impl const & impl() const { __assume( this != 0 ); return static_cast<Impl const &>( *this ); }
+    Impl       & impl()       { BF_ASSUME( this != 0 ); return static_cast<Impl       &>( *this ); }
+    Impl const & impl() const { BF_ASSUME( this != 0 ); return static_cast<Impl const &>( *this ); }
 
 protected:
     template <typename View>
