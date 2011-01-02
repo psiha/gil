@@ -104,7 +104,9 @@ posix_handle::handle_t const & posix_handle::handle() const
 native_handle_guard create_file( char const * const file_name, file_flags const & flags )
 {
     BOOST_ASSERT( file_name );
+
 #ifdef _WIN32
+
     HANDLE const file_handle
     (
         ::CreateFileA
@@ -113,10 +115,16 @@ native_handle_guard create_file( char const * const file_name, file_flags const 
         )
     );
     BOOST_ASSERT( ( file_handle == INVALID_HANDLE_VALUE ) || ( ::GetLastError() == NO_ERROR ) || ( ::GetLastError() == ERROR_ALREADY_EXISTS ) );
-    return native_handle_guard( file_handle );
+
 #else
 
+    mode_t const current_mask( ::umask( 0 ) );
+    int const file_handle( ::open( file_name, flags.oflag, flags.pmode ) );
+    BOOST_VERIFY( ::umask( current_mask ) == 0 );
+
 #endif // _WIN32
+
+    return native_handle_guard( file_handle );
 }
 
 //------------------------------------------------------------------------------
@@ -139,7 +147,7 @@ bool set_file_size( guard::native_handle_t const file_handle, unsigned int const
 
     return success != false;
 #else
-
+    return ::ftruncate( file_handle, desired_size ) != -1;
 #endif // _WIN32
 }
 
@@ -151,7 +159,9 @@ std::size_t get_file_size( guard::native_handle_t const file_handle )
     BOOST_ASSERT( ( file_size != INVALID_FILE_SIZE ) || ( file_handle == INVALID_HANDLE_VALUE ) || ( ::GetLastError() == NO_ERROR ) );
     return file_size;
 #else
-
+    struct stat file_info;
+    BOOST_VERIFY( ::fstat( file_handle, &file_info ) == 0 );
+    return file_info.st_size;
 #endif // _WIN32
 }
 
@@ -276,6 +286,7 @@ memory_mapping::memory_mapping
 )
 {
 #ifdef _WIN32
+
     // Implementation note:
     // Mapped views hold internal references to the following handles so we do
     // not need to hold/store them ourselves:
@@ -302,22 +313,32 @@ memory_mapping::memory_mapping
             ? view_start + desired_size
             : view_start
     );
+
+#else
+
+    iterator const view_start( desired_size ? static_cast<iterator>( ::mmap( 0, desired_size, flags.protection, flags.flags, file_handle, 0 ) ) : 0 );
+    iterator const view_end
+    (
+        ( view_start != MAP_FAILED )
+            ? view_start + desired_size
+            : view_start
+    );
+
+#endif // _WIN32
+
     /// \todo Convert these constructors to factory functions to avoid the
     /// anti-pattern of a fallible-yet-nonthrowing constructor.
     ///                                       (10.10.2010.) (Domagoj Saric)
     iterator_range::operator = ( iterator_range( view_start, view_end ) );
-#else
-
-#endif // _WIN32
 }
 
 
 memory_mapping::~memory_mapping()
 {
 #ifdef _WIN32
-    BOOST_VERIFY( ::UnmapViewOfFile( begin() ) || this->empty() );
+    BOOST_VERIFY( ::UnmapViewOfFile( begin()         ) || this->empty() );
 #else
-
+    BOOST_VERIFY( ( ::munmap( begin(), size() ) == 0 ) || this->empty() );
 #endif // _WIN32
 }
 
