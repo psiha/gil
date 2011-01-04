@@ -580,6 +580,12 @@ public:
         return point2<std::ptrdiff_t>( decompressor().output_width, decompressor().output_height );
     }
 
+public: // Low-level (row, strip, tile) access
+    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
+    {
+        read_scanline( p_row_storage );
+    }
+
     jpeg_decompress_struct       & lib_object()       { dirty_output_dimensions_ = true; return decompressor(); }
     jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
 

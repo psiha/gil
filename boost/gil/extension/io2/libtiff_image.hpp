@@ -554,6 +554,31 @@ public:
         return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
     }
 
+public: // Low-level (row, strip, tile) access
+    class sequential_row_access_state
+        :
+        private detail::libtiff_base::cumulative_result
+    {
+    public:
+        using detail::libtiff_base::cumulative_result::failed;
+        using detail::libtiff_base::cumulative_result::throw_if_error;
+
+        BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
+
+        friend libtiff_image;
+    };
+
+    static sequential_row_access_state begin_sequential_row_access() { return sequential_row_access_state(); }
+
+    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage, unsigned int const plane = 0 ) const
+    {
+        state.accumulate_greater
+        (
+            ::TIFFReadScanline( &lib_object(), p_row_storage, ::TIFFCurrentRow( &lib_object() ), static_cast<tsample_t>( plane ) ),
+            0
+        );
+    }
+
 private:
     template <typename T>
     T get_field( ttag_t const tag ) const

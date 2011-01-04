@@ -518,10 +518,16 @@ public:
     point2<std::ptrdiff_t> dimensions() const
     {
         return point2<std::ptrdiff_t>
-               (
-                   ::png_get_image_width ( &png_object(), &info_object() ),
-                   ::png_get_image_height( &png_object(), &info_object() )
-               );
+        (
+            ::png_get_image_width ( &png_object(), &info_object() ),
+            ::png_get_image_height( &png_object(), &info_object() )
+        );
+    }
+
+public: // Low-level (row, strip, tile) access
+    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
+    {
+        read_row( p_row_storage );
     }
 
     png_struct & lib_object() const { return png_object(); }

@@ -245,7 +245,7 @@ private:
             { 0x557CF400, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // BMP
             { 0x557CF402, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // GIF
             { 0x557CF401, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // JPEG
-            { 0x557cf406, 0x1a04, 0x11d3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // PNG
+            { 0x557CF406, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // PNG
             { 0x557CF405, 0x1A04, 0x11D3, 0x9A, 0x73, 0x00, 0x00, 0xF8, 0x1E, 0xF3, 0x2E }, // TIFF
             CLSID_NULL // TGA
         };
@@ -326,7 +326,7 @@ struct formatted_image_traits<gp_image>
 
             BOOST_STATIC_ASSERT( is_supported<typename get_original_view_t<View>::type>::value );
 
-            Width       = view.width();
+            Width       = view.width ();
             Height      = view.height();
             Stride      = view.pixels().row_size();
             PixelFormat = gil_to_native_format<View>::value;
@@ -398,6 +398,62 @@ public:
     static std::size_t format_size( format_t const format )
     {
         return Gdiplus::GetPixelFormatSize( format );
+    }
+
+public: // Low-level (row, strip, tile) access
+    class sequential_row_access_state
+        :
+        private detail::cumulative_result
+    {
+    public:
+        using detail::cumulative_result::failed;
+        void throw_if_error() const { detail::cumulative_result::throw_if_error( "GDI+ failure" ); }
+
+        BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
+
+    private:
+        sequential_row_access_state( gp_image const & source_image )
+            :
+            roi_( 0, 0, source_image.dimensions().x, 1 )
+        {
+            bitmapData_.Width  = roi_.Width;
+            bitmapData_.Height = 1;
+            bitmapData_.PixelFormat = source_image.format();
+            bitmapData_.Stride = bitmapData_.Width * source_image.format_size( bitmapData_.PixelFormat );
+            bitmapData_.Reserved = 0;
+        }
+
+    private: friend gp_image;
+        Gdiplus::Rect       roi_       ;
+        Gdiplus::BitmapData bitmapData_;
+    };
+
+    sequential_row_access_state begin_sequential_row_access() const { return sequential_row_access_state( *this ); }
+
+    /// \todo Kill duplication with raw_convert_to_prepared_view().
+    ///                                       (04.01.2011.) (Domagoj Saric)
+    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage ) const
+    {
+        using namespace detail ;
+        using namespace Gdiplus;
+
+        state.bitmapData_.Scan0 = p_row_storage;
+
+        state.accumulate_equal
+        (
+            DllExports::GdipBitmapLockBits
+            (
+                pBitmap_,
+                &state.roi_,
+                ImageLockModeRead | ImageLockModeUserInputBuf,
+                state.bitmapData_.PixelFormat,
+                &state.bitmapData_
+            ),
+            Gdiplus::Ok
+        );
+        verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &state.bitmapData_ ) );
+
+        ++state.roi_.Y;
     }
 
     ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
@@ -516,6 +572,7 @@ private:
         );
         verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &bitmapData ) );
     }
+
 
     void raw_convert_to_prepared_view( view_data_t const & view_data ) const
     {

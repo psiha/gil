@@ -118,12 +118,14 @@ public:
 public:
     wic_roi( value_type const x, value_type const y, value_type const width, value_type const height )
     {
-        X = x; Y = y; Width = width; Height = height;
+        X = x; Y = y;
+        Width = width; Height = height;
     }
 
-    wic_roi( offset_t const offset, value_type const width, value_type const height )
+    wic_roi( offset_t const top_left, value_type const width, value_type const height )
     {
-        X = offset.x; Y = offset.y; Width = width; Height = height;
+        X = top_left.x; Y = top_left.y;
+        Width = width; Height = height;
     }
 
     wic_roi( offset_t const top_left, offset_t const bottom_right )
@@ -151,7 +153,7 @@ struct wic_view_data_t
     template <typename View>
     wic_view_data_t( View const & view )
         :
-        p_roi_ ( 0                                   ),
+        p_roi_ ( 0                                                                                ),
         format_( view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value )
     {
         set_bitmapdata_for_view( view );
@@ -413,8 +415,6 @@ public:
     //    create_first_frame_decoder();
     //}
 
-    lib_object_t & lib_object() { return lib_object_; }
-
 public:
     point2<std::ptrdiff_t> dimensions() const
     {
@@ -440,6 +440,49 @@ public:
         verify_result( p_pixel_format_info->GetBitsPerPixel( &bits_per_pixel ) );
         return bits_per_pixel;
     }
+
+public: // Low-level (row, strip, tile) access
+    class sequential_row_access_state
+        :
+        private detail::cumulative_result
+    {
+    public:
+        using detail::cumulative_result::failed;
+        void throw_if_error() const { detail::cumulative_result::throw_if_error( "WIC failure" ); }
+
+        BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
+
+    private:
+        sequential_row_access_state( wic_image const & source_image )
+            :
+            roi_   ( 0, 0, source_image.dimensions().x, 1 ),
+            stride_( roi_.X * source_image.format_size( source_image.format() ) )
+        {}
+
+    private: friend wic_image;
+        detail::wic_roi       roi_   ;
+        UINT            const stride_;
+    };
+
+    sequential_row_access_state begin_sequential_row_access() const { return sequential_row_access_state( *this ); }
+
+    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage ) const
+    {
+        state.accumulate_equal
+        (
+            frame_decoder().CopyPixels
+            (
+                &state.roi_,
+                state.stride_,
+                state.stride_,
+                p_row_storage
+            ),
+            S_OK
+        );
+        ++state.roi_.Y;
+    }
+
+    lib_object_t & lib_object() { return lib_object_; }
 
 private: // Private formatted_image_base interface.
     friend base_t;

@@ -326,13 +326,18 @@ struct open_on_write_writer
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class formatted_image_base : public /*khm private seems to bug MSVC++ 10 with the libtiff backend....*/ noncopyable
+class formatted_image_base : noncopyable
 {
 public:
     typedef point2<std::ptrdiff_t> dimensions_t;
 
     typedef unsigned int image_type_id;
     static image_type_id const unsupported_format = static_cast<image_type_id>( -1 );
+
+    struct sequential_row_access_state { BOOST_STATIC_CONSTANT( bool, throws_on_error = true ); };
+
+public:
+    static sequential_row_access_state begin_sequential_row_access() { return sequential_row_access_state(); }
 
 protected:
     static bool dimensions_mismatch( dimensions_t const & mine, dimensions_t const & other ) { return mine != other; }
