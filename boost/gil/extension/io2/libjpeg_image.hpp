@@ -56,8 +56,8 @@ template <> struct gil_to_libjpeg_format<cmyk8_pixel_t, false> : mpl::integral_c
 
 struct view_libjpeg_format
 {
-    template <class View>
-    struct apply : gil_to_libjpeg_format<typename View::value_type, is_planar<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct apply : gil_to_libjpeg_format<Pixel, IsPlanar> {};
 };
 
 
@@ -417,11 +417,11 @@ struct formatted_image_traits<libjpeg_image>
     typedef       ::J_COLOR_SPACE                   format_t;
     typedef detail::libjpeg_supported_pixel_formats supported_pixel_formats_t;
     typedef detail::libjpeg_roi                     roi_t;
-    typedef detail::view_libjpeg_format             view_to_native_format;
+    typedef detail::view_libjpeg_format             gil_to_native_format;
     typedef detail::view_data_t                     view_data_t;
 
-    template <class View>
-    struct is_supported : mpl::bool_<view_to_native_format::apply<View>::value != JCS_UNKNOWN> {};
+    template <typename Pixel, bool IsPlanar>
+    struct is_supported : mpl::bool_<gil_to_native_format::apply<Pixel, IsPlanar>::value != JCS_UNKNOWN> {};
 
     typedef mpl::map3
             <

@@ -508,6 +508,14 @@ protected:
 template <class Impl>
 class formatted_image : public formatted_image_base
 {
+private:
+    template <typename T> struct gil_to_native_format;
+
+    template <typename PixelType, typename IsPlanar>
+    struct gil_to_native_format_aux
+        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar::value>::type
+    {};
+
 public:
     typedef typename formatted_image_traits<Impl>::format_t format_t;
 
@@ -515,9 +523,16 @@ public:
     typedef typename formatted_image_traits<Impl>::roi_t                     roi;
     typedef typename roi::offset_t                                           offset_t;
 
-    typedef any_image<supported_pixel_formats>     dynamic_image_t;
-    typedef typename dynamic_image_t::const_view_t const_view_t;
-    typedef typename dynamic_image_t::      view_t       view_t;
+    template <typename PixelType, typename IsPlanar>
+    struct gil_to_native_format<mpl::pair<PixelType, IsPlanar > > : gil_to_native_format_aux<PixelType, IsPlanar> {};
+
+    template <typename PixelType, bool IsPlanar>
+    struct gil_to_native_format<image<PixelType, IsPlanar> > : gil_to_native_format_aux<PixelType, mpl::bool_<IsPlanar> > {};
+
+    template <typename Locator>
+    struct gil_to_native_format<image_view<Locator> > : gil_to_native_format_aux<typename image_view<Locator>::value_type, is_planar<image_view<Locator> > > {};
+    
+    typedef any_image<supported_pixel_formats> dynamic_image_t;
 
     template <typename Source>
     struct reader_for
@@ -554,12 +569,12 @@ public:
 
     public:
         typedef typename base_writer_t::wrapper
-            <
-                first_layer_wrapper,
-                Target,
-                typename formatted_image_traits<Impl>::writer_view_data_t,
-                default_format
-            > type;
+                <
+                    first_layer_wrapper,
+                    Target,
+                    typename formatted_image_traits<Impl>::writer_view_data_t,
+                    default_format
+                > type;
     };
 
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
@@ -614,7 +629,7 @@ private:
 
     struct write_is_supported
     {
-        template<typename View>
+        template <typename View>
         struct apply : public is_supported<View> {};
     };
 
@@ -627,10 +642,8 @@ private:
         template <typename ImageIndex>
         void operator()( ImageIndex )
         {
-            format_t const image_format
-            (
-                formatted_image_traits<Impl>::view_to_native_format::apply<typename mpl::at<supported_pixel_formats, ImageIndex>::type::view_t>::value
-            );
+            typedef typename mpl::at<supported_pixel_formats, ImageIndex>::type pixel_format_t;
+            format_t const image_format( gil_to_native_format<pixel_format_t>::value );
             if ( image_format == this->format_ )
             {
                 BOOST_ASSERT( image_id_ == -1 );
@@ -638,7 +651,7 @@ private:
             }
         }
 
-        format_t /*const*/ format_;
+        format_t     const format_  ;
         unsigned int       image_id_;
 
     private:
@@ -671,7 +684,7 @@ protected:
     template <typename View>
     bool formats_mismatch() const
     {
-        return formats_mismatch( formatted_image_traits<Impl>::view_to_native_format:: BOOST_NESTED_TEMPLATE apply<get_original_view_t<View>::type>::value );
+        return formats_mismatch( gil_to_native_format<get_original_view_t<View>::type>::value );
     }
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
@@ -820,8 +833,7 @@ public: // Images...
     template <typename Images, typename dimensions_policy, typename formats_policy>
     void copy_to_image( any_image<Images> & im ) const
     {
-        typedef mpl::range_c<std::size_t, 0, typename Impl::supported_pixel_formats> valid_range_t;
-        switch_<valid_range_t>
+        switch_<valid_type_id_range_t>
         (
             impl().current_image_format_id(),
             read_dynamic_image<Images, dimensions_policy, formats_policy>( im, *this ),

@@ -93,8 +93,8 @@ typedef mpl::
 
 struct view_gp_format
 {
-    template <class View>
-    struct apply : gil_to_gp_format<typename View::value_type, is_planar<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct apply : gil_to_gp_format<Pixel, IsPlanar> {};
 };
 
 
@@ -274,10 +274,10 @@ struct formatted_image_traits<gp_image>
 
     typedef detail::gp_roi roi_t;
 
-    typedef detail::view_gp_format view_to_native_format;
+    typedef detail::view_gp_format gil_to_native_format;
 
-    template <class View>
-    struct is_supported : detail::is_supported<view_to_native_format::apply<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct is_supported : detail::is_supported<gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<Pixel, IsPlanar>::value> {};
 
     typedef mpl::map5
     <
@@ -329,7 +329,7 @@ struct formatted_image_traits<gp_image>
             Width       = view.width();
             Height      = view.height();
             Stride      = view.pixels().row_size();
-            PixelFormat = view_to_native_format::apply<View>::value;
+            PixelFormat = gil_to_native_format<View>::value;
             Scan0       = formatted_image_base::get_raw_data( view );
             Reserved    = 0;
         }

@@ -118,8 +118,8 @@ struct gil_to_libtiff_format
 
 struct view_libtiff_format
 {
-    template <class View>
-    struct apply : gil_to_libtiff_format<typename View::value_type, is_planar<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct apply : gil_to_libtiff_format<Pixel, IsPlanar> {};
 };
 
 
@@ -265,7 +265,7 @@ struct tiff_view_data_t
         stride_    ( view.pixels().row_size() ),
         offset_    ( offset                   )
         #ifdef _DEBUG
-            ,format_id_( view_libtiff_format::apply<View>::value )
+            ,format_id_( view_libtiff_format::apply<typename View::value_type, is_planar<View>::value>::value )
         #endif
     {
         set_buffers( view, is_planar<View>() );
@@ -485,7 +485,7 @@ struct formatted_image_traits<libtiff_image>
 
     typedef detail::generic_vertical_roi roi_t;
 
-    typedef detail::view_libtiff_format view_to_native_format;
+    typedef detail::view_libtiff_format gil_to_native_format;
 
     typedef detail::tiff_view_data_t view_data_t;
 
@@ -508,8 +508,8 @@ struct formatted_image_traits<libtiff_image>
 
     typedef detail::tiff_writer_view_data_t writer_view_data_t;
 
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void *) );
-    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = false           );
+    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
+    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = false            );
 };
 
 

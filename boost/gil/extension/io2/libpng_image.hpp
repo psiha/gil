@@ -56,13 +56,13 @@ template <> struct gil_to_libpng_format<gray16_pixel_t, false> : mpl::integral_c
 
 struct view_libpng_format
 {
-    template <class View>
-    struct apply : gil_to_libpng_format<typename View::value_type, is_planar<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct apply : gil_to_libpng_format<Pixel, IsPlanar> {};
 };
 
 
-template <class View>
-struct is_view_supported : mpl::bool_<view_libpng_format::apply<View>::value != -1> {};
+template <typename Pixel, bool IsPlanar>
+struct is_view_supported : mpl::bool_<view_libpng_format::apply<Pixel, IsPlanar>::value != -1> {};
 
 
 typedef mpl::vector6
@@ -386,11 +386,11 @@ struct formatted_image_traits<libpng_image>
     typedef         int                            format_t;
     typedef detail::libpng_supported_pixel_formats supported_pixel_formats_t;
     typedef detail::libpng_roi                     roi_t;
-    typedef detail::view_libpng_format             view_to_native_format;
+    typedef detail::view_libpng_format             gil_to_native_format;
     typedef detail::libpng_view_data_t             view_data_t;
 
-    template <class View>
-    struct is_supported : detail::is_view_supported<View> {};
+    template <typename Pixel, bool IsPlanar>
+    struct is_supported : detail::is_view_supported<Pixel, IsPlanar> {};
 
     typedef mpl::map3
             <
@@ -588,6 +588,7 @@ private: // Private formatted_image_base interface.
         else
         if ( colour_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8 )
             ::png_set_expand_gray_1_2_4_to_8( &png_object() );
+
         if ( ::png_get_valid( &png_object(), &info_object(), PNG_INFO_tRNS ) )
             ::png_set_tRNS_to_alpha( &png_object() );
 

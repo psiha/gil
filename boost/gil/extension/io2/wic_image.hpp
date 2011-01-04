@@ -102,8 +102,8 @@ typedef mpl::vector8
 
 struct view_wic_format
 {
-    template <class View>
-    struct apply : gil_to_wic_format<typename View::value_type, is_planar<View>::value> {};
+    template <typename Pixel, bool IsPlanar>
+    struct apply : gil_to_wic_format<Pixel, IsPlanar> {};
 };
 
 
@@ -152,7 +152,7 @@ struct wic_view_data_t
     wic_view_data_t( View const & view )
         :
         p_roi_ ( 0                                   ),
-        format_( view_wic_format::apply<View>::value )
+        format_( view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value )
     {
         set_bitmapdata_for_view( view );
     }
@@ -295,16 +295,16 @@ struct formatted_image_traits<wic_image>
 
     typedef detail::wic_roi roi_t;
 
-    typedef detail::view_wic_format view_to_native_format;
+    typedef detail::view_wic_format gil_to_native_format;
 
-    template <class View>
+    template <typename Pixel, bool IsPlanar>
     struct is_supported
         :
         mpl::not_
         <
             is_same
             <
-                typename view_to_native_format::apply<View>::type,
+                typename gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<Pixel, IsPlanar>::type,
                 //format_guid<wic_format                  >,
                 detail::format_guid<GUID_WICPixelFormatUndefined>
             >
