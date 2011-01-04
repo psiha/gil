@@ -252,41 +252,6 @@ public:
     {}
 };
 
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class cumulative_result
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class cumulative_result
-{
-public:
-    cumulative_result() : result_( true ) {}
-
-    void accumulate( bool const new_result )
-    {
-        result_ &= new_result;
-        // Catch the error early when debugging...
-        BOOST_ASSERT( result_ );
-    }
-
-    template <typename T1, typename T2>
-    void accumulate_equal    ( T1 const new_result, T2 const desired_result   ) { accumulate( new_result == desired_result   ); }
-    template <typename T>
-    void accumulate_different( T  const new_result, T  const undesired_result ) { accumulate( new_result != undesired_result ); }
-    template <typename T1, typename T2>
-    void accumulate_greater  ( T1 const new_result, T2 const threshold        ) { accumulate( new_result > threshold         ); }
-
-    void throw_if_error( char const * const description ) const { io_error_if_not( result_, description ); }
-
-    bool & get() { return result_; }
-
-private:
-    bool result_;
-};
-
-
 //------------------------------------------------------------------------------
 } // namespace detail
 //------------------------------------------------------------------------------
