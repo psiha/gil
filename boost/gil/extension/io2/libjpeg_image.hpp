@@ -638,11 +638,11 @@ private: // Private interface for the base formatted_image<> class.
         using namespace detail;
 
         typedef typename MyView::value_type pixel_t;
-        std::size_t         const scanline_length  ( decompressor().image_width * decompressor().num_components );
-        scoped_ptr<JSAMPLE> const p_scanline_buffer( new JSAMPLE[ scanline_length ] );
-        JSAMPROW       scanline   ( p_scanline_buffer.get()    );
-        JSAMPROW const scanlineEnd( scanline + scanline_length );
-        
+        std::size_t           const scanline_length  ( decompressor().image_width * decompressor().num_components );
+        scoped_array<JSAMPLE> const p_scanline_buffer( new JSAMPLE[ scanline_length ] );
+        JSAMPROW       scanline    ( p_scanline_buffer.get()    );
+        JSAMPROW const scanline_end( scanline + scanline_length );
+
         BOOST_ASSERT( closest_gil_supported_format() == view_libjpeg_format::apply<MyView>::value );
         setup_decompression
         (
@@ -671,7 +671,7 @@ private: // Private interface for the base formatted_image<> class.
 
             pixel_t const *   p_source_pixel( gil_reinterpret_cast_c<pixel_t const *>( scanline ) );
             target_x_iterator p_target_pixel( original_view( view ).row_begin( scanline_index )   );
-            while ( p_source_pixel < gil_reinterpret_cast_c<pixel_t const *>( scanlineEnd ) )
+            while ( p_source_pixel < gil_reinterpret_cast_c<pixel_t const *>( scanline_end ) )
             {
                 converter( *p_source_pixel, *p_target_pixel );
                 ++p_source_pixel;
