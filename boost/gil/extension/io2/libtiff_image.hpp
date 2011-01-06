@@ -51,8 +51,6 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-unsigned short const unknown( static_cast<unsigned short>( -1 ) );
-
 #define LIBTIFF_SPP(         param ) ( ( param ) << ( 0 ) )
 #define LIBTIFF_BPS(         param ) ( ( param ) << ( 0 + 3 ) )
 #define LIBTIFF_FMT(         param ) ( ( param ) << ( 0 + 3 + 5 ) )
@@ -60,14 +58,14 @@ unsigned short const unknown( static_cast<unsigned short>( -1 ) );
 #define LIBTIFF_PHOTOMETRIC( param ) ( ( param ) << ( 0 + 3 + 5 + 3 + 2 ) )
 #define LIBTIFF_INKSET(      param ) ( ( param ) << ( 0 + 3 + 5 + 3 + 2 + 3 ) )
 
-#define LIBTIFF_FORMAT( spp, bps, sample_format, planar_config, photometric_interpretation, inkset )    \
-(                                                                                                       \
-        LIBTIFF_SPP(         spp                        ) |                                             \
-        LIBTIFF_BPS(         bps                        ) |                                             \
-        LIBTIFF_FMT(         sample_format              ) |                                             \
-        LIBTIFF_PLANAR(      planar_config              ) |                                             \
-        LIBTIFF_PHOTOMETRIC( photometric_interpretation ) |                                             \
-        LIBTIFF_INKSET(      inkset                     )                                               \
+#define LIBTIFF_FORMAT( spp, bps, sample_format, planar_config, photometric_interpretation, inkset ) \
+(                                                                                                    \
+        LIBTIFF_SPP(         spp                        ) |                                          \
+        LIBTIFF_BPS(         bps                        ) |                                          \
+        LIBTIFF_FMT(         sample_format              ) |                                          \
+        LIBTIFF_PLANAR(      planar_config              ) |                                          \
+        LIBTIFF_PHOTOMETRIC( photometric_interpretation ) |                                          \
+        LIBTIFF_INKSET(      inkset                     )                                            \
 )
 
 
@@ -340,20 +338,20 @@ protected:
     explicit libtiff_base( FILE & file )
         :
         p_tiff_
-    (
-        ::TIFFClientOpen
         (
-            "", "",
-                &file,
-                &detail::FILE_read_proc,
-                &detail::FILE_write_proc,
-                &detail::FILE_seek_proc,
-                &detail::FILE_close_proc_nop,
-                &detail::FILE_size_proc,
-                &detail::FILE_map_proc,
-                &detail::FILE_unmap_proc
+            ::TIFFClientOpen
+            (
+                "", "",
+                    &file,
+                    &detail::FILE_read_proc,
+                    &detail::FILE_write_proc,
+                    &detail::FILE_seek_proc,
+                    &detail::FILE_close_proc_nop,
+                    &detail::FILE_size_proc,
+                    &detail::FILE_map_proc,
+                    &detail::FILE_unmap_proc
+            )
         )
-    )
     {
         construction_check();
     }
@@ -361,20 +359,20 @@ protected:
     explicit libtiff_base( memory_chunk_t & in_memory_image )
         :
         p_tiff_
-    (
-        ::TIFFClientOpen
         (
-            "", "M",
-                &in_memory_image,
-                &detail::memory_read_proc,
-                &detail::memory_write_proc,
-                &detail::memory_seek_proc,
-                &detail::memory_close_proc,
-                &detail::memory_size_proc,
-                &detail::memory_map_proc,
-                &detail::memory_unmap_proc
+            ::TIFFClientOpen
+            (
+                "", "M",
+                    &in_memory_image,
+                    &detail::memory_read_proc,
+                    &detail::memory_write_proc,
+                    &detail::memory_seek_proc,
+                    &detail::memory_close_proc,
+                    &detail::memory_size_proc,
+                    &detail::memory_map_proc,
+                    &detail::memory_unmap_proc
+            )
         )
-    )
     {
         construction_check();
     }

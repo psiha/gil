@@ -23,7 +23,7 @@
 #include "detail/shared.hpp"
 
 #include <boost/array.hpp>
-#include <boost/smart_ptr/scoped_ptr.hpp>
+#include <boost/smart_ptr/scoped_array.hpp>
 
 #define JPEG_INTERNALS
 #include "jpeglib.h"
