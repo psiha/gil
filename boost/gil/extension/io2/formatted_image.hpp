@@ -536,6 +536,21 @@ public:
 
     template <typename Locator>
     struct gil_to_native_format<image_view<Locator> > : gil_to_native_format_aux<typename image_view<Locator>::value_type, is_planar<image_view<Locator> > > {};
+
+    template <class View>
+    struct has_supported_format
+    {
+    private:
+        typedef typename get_original_view_t<View>::type original_view_t;
+
+    public:
+        typedef typename formatted_image_traits<Impl>:: BOOST_NESTED_TEMPLATE is_supported
+        <
+            typename original_view_t::value_type,
+            is_planar<original_view_t>::value
+        > type;
+        BOOST_STATIC_CONSTANT( bool, value = type::value );
+    };
     
     typedef any_image<supported_pixel_formats> dynamic_image_t;
 
@@ -557,29 +572,29 @@ public:
         BOOST_STATIC_CONSTANT( bool      , single_format  = mpl::size <supported_image_formats>::value == 1  );
 
         typedef typename mpl::at
-                <
-                    typename formatted_image_traits<Impl>::writers,
-                    Target
-                >::type base_writer_t;
+        <
+            typename formatted_image_traits<Impl>::writers,
+            Target
+        >::type base_writer_t;
 
         // The backend does not seem to provide a writer for the specified target...
         BOOST_STATIC_ASSERT(( !is_same<base_writer_t, mpl::void_>::value ));
 
         typedef typename mpl::if_c
-                <
-                    single_format,
-                    typename base_writer_t:: BOOST_NESTED_TEMPLATE single_format_writer_wrapper<base_writer_t, Target, default_format>,
-                    base_writer_t
-                >::type first_layer_wrapper;
+        <
+            single_format,
+            typename base_writer_t:: BOOST_NESTED_TEMPLATE single_format_writer_wrapper<base_writer_t, Target, default_format>,
+            base_writer_t
+        >::type first_layer_wrapper;
 
     public:
         typedef typename base_writer_t::wrapper
-                <
-                    first_layer_wrapper,
-                    Target,
-                    typename formatted_image_traits<Impl>::writer_view_data_t,
-                    default_format
-                > type;
+        <
+            first_layer_wrapper,
+            Target,
+            typename formatted_image_traits<Impl>::writer_view_data_t,
+            default_format
+        > type;
     };
 
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
@@ -589,15 +604,13 @@ protected:
 
     typedef typename formatted_image_traits<Impl>::view_data_t view_data_t;
 
-    template <class View>
-    struct is_supported : formatted_image_traits<Impl>:: BOOST_NESTED_TEMPLATE is_supported<get_original_view_t<View>::type> {};
-
 private:
     template <typename Images, typename dimensions_policy, typename formats_policy>
     class read_dynamic_image : make_dynamic_image<Images>
     {
     private:
         typedef make_dynamic_image<Images> base;
+
     public:
         typedef void result_type;
 
@@ -635,7 +648,7 @@ private:
     struct write_is_supported
     {
         template <typename View>
-        struct apply : public is_supported<View> {};
+        struct apply : public has_supported_format<View> {};
     };
 
     typedef mpl::range_c<std::size_t, 0, mpl::size<supported_pixel_formats>::value> valid_type_id_range_t;
@@ -753,7 +766,7 @@ public: // Views...
     void copy_to( View const & view, assert_dimensions_match, assert_formats_match ) const
     {
         BOOST_STATIC_ASSERT( get_original_view_t<View>::type::value_type::is_mutable );
-        BOOST_STATIC_ASSERT( is_supported<View>::value                               );
+        BOOST_STATIC_ASSERT( has_supported_format<View>::value                       );
         BOOST_ASSERT( !impl().dimensions_mismatch( view )                            );
         BOOST_ASSERT( !impl().formats_mismatch<View>()                               );
         impl().raw_copy_to_prepared_view( get_view_data( view ) );

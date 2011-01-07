@@ -54,11 +54,8 @@ template <> struct gil_to_libjpeg_format<gray8_pixel_t, false> : mpl::integral_c
 template <> struct gil_to_libjpeg_format<cmyk8_pixel_t, false> : mpl::integral_c<J_COLOR_SPACE, JCS_CMYK     > {};
 
 
-struct view_libjpeg_format
-{
-    template <typename Pixel, bool IsPlanar>
-    struct apply : gil_to_libjpeg_format<Pixel, IsPlanar> {};
-};
+template <typename Pixel, bool IsPlanar>
+struct libjpeg_is_supported : mpl::bool_<gil_to_libjpeg_format<Pixel, IsPlanar>::value != JCS_UNKNOWN> {};
 
 
 typedef mpl::vector3
@@ -215,7 +212,7 @@ struct view_data_t : decompression_setup_data_t
         :
         decompression_setup_data_t
         (
-            view_libjpeg_format::apply<View>::value,
+            gil_to_libjpeg_format<typename View::value_type, is_planar<View>::value>::value,
             formatted_image_base::get_raw_data( view ),
             offset
         ),
@@ -224,7 +221,7 @@ struct view_data_t : decompression_setup_data_t
         stride_( view.pixels().row_size() ),
         number_of_channels_( num_channels<View>::value )
     {
-        BOOST_STATIC_ASSERT( view_libjpeg_format::apply<View>::value != JCS_UNKNOWN );
+        BOOST_STATIC_ASSERT(( libjpeg_is_supported<typename View::value_type, is_planar<View>::value>::value ));
     }
 
     void set_format( J_COLOR_SPACE const format ) { format_ = format; }
@@ -417,11 +414,16 @@ struct formatted_image_traits<libjpeg_image>
     typedef       ::J_COLOR_SPACE                   format_t;
     typedef detail::libjpeg_supported_pixel_formats supported_pixel_formats_t;
     typedef detail::libjpeg_roi                     roi_t;
-    typedef detail::view_libjpeg_format             gil_to_native_format;
     typedef detail::view_data_t                     view_data_t;
 
+    struct gil_to_native_format
+    {
+        template <typename Pixel, bool IsPlanar>
+        struct apply : detail::gil_to_libjpeg_format<Pixel, IsPlanar> {};
+    };
+
     template <typename Pixel, bool IsPlanar>
-    struct is_supported : mpl::bool_<gil_to_native_format::apply<Pixel, IsPlanar>::value != JCS_UNKNOWN> {};
+    struct is_supported : detail::libjpeg_is_supported<Pixel, IsPlanar> {};
 
     typedef mpl::map3
             <
@@ -643,12 +645,13 @@ private: // Private interface for the base formatted_image<> class.
         JSAMPROW       scanline    ( p_scanline_buffer.get()    );
         JSAMPROW const scanline_end( scanline + scanline_length );
 
-        BOOST_ASSERT( closest_gil_supported_format() == view_libjpeg_format::apply<MyView>::value );
+        format_t const my_format( gil_to_libjpeg_format<typename MyView::value_type, is_planar<MyView>::value>::value );
+        BOOST_ASSERT( this->closest_gil_supported_format() == my_format );
         setup_decompression
         (
             decompression_setup_data_t
             (
-                view_libjpeg_format::apply<MyView>::value,
+                my_format,
                 scanline,
                 detail::get_offset<offset_t>( view )
             )

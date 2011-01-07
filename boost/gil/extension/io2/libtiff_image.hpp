@@ -114,13 +114,6 @@ struct gil_to_libtiff_format
 {};
 
 
-struct view_libtiff_format
-{
-    template <typename Pixel, bool IsPlanar>
-    struct apply : gil_to_libtiff_format<Pixel, IsPlanar> {};
-};
-
-
 typedef mpl::vector35
 <
     image<rgb8_pixel_t , false>,
@@ -263,7 +256,7 @@ struct tiff_view_data_t
         stride_    ( view.pixels().row_size() ),
         offset_    ( offset                   )
         #ifdef _DEBUG
-            ,format_id_( view_libtiff_format::apply<typename View::value_type, is_planar<View>::value>::value )
+            ,format_id_( gil_to_libtiff_format<typename View::value_type, is_planar<View>::value>::value )
         #endif
     {
         set_buffers( view, is_planar<View>() );
@@ -314,7 +307,7 @@ struct tiff_writer_view_data_t : public tiff_view_data_t
         :
         tiff_view_data_t( view, 0 )
     {
-        format_.number = view_libtiff_format::apply<View>::value;
+        format_.number = gil_to_libtiff_format<typename View::value_type, is_planar<View>::value>::value;
     }
 
     full_format_t format_;
@@ -483,11 +476,15 @@ struct formatted_image_traits<libtiff_image>
 
     typedef detail::generic_vertical_roi roi_t;
 
-    typedef detail::view_libtiff_format gil_to_native_format;
-
     typedef detail::tiff_view_data_t view_data_t;
 
-    template <class View>
+    struct gil_to_native_format
+    {
+        template <typename Pixel, bool IsPlanar>
+        struct apply : detail::gil_to_libtiff_format<Pixel, IsPlanar> {};
+    };
+
+    template <typename Pixel, bool IsPlanar>
     struct is_supported : mpl::true_ {}; //...zzz...
 
     typedef mpl::map2
@@ -563,8 +560,12 @@ public: // Low-level (row, strip, tile) access
 
         BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
 
-        friend libtiff_image;
+    private: friend libtiff_image;
+        sequential_row_access_state() : position_( 0 ) {}
+
+        unsigned int position_;
     };
+
 
     static sequential_row_access_state begin_sequential_row_access() { return sequential_row_access_state(); }
 
@@ -572,7 +573,21 @@ public: // Low-level (row, strip, tile) access
     {
         state.accumulate_greater
         (
-            ::TIFFReadScanline( &lib_object(), p_row_storage, ::TIFFCurrentRow( &lib_object() ), static_cast<tsample_t>( plane ) ),
+            ::TIFFReadScanline( &lib_object(), p_row_storage, state.position_++, static_cast<tsample_t>( plane ) ),
+            0
+        );
+    }
+
+
+    typedef sequential_row_access_state sequential_tile_access_state;
+
+    static sequential_tile_access_state begin_sequential_tile_access() { return begin_sequential_row_access(); }
+
+    void read_tile( sequential_row_access_state & state, unsigned char * const p_tile_storage ) const
+    {
+        state.accumulate_greater
+        (
+            ::TIFFReadEncodedTile( &lib_object(), state.position_++, p_tile_storage, -1 ),
             0
         );
     }

@@ -41,28 +41,24 @@ namespace detail
 //------------------------------------------------------------------------------
 
 template <typename Pixel, bool isPlanar>
-struct gil_to_libpng_format : mpl::integral_c<int, -1> {};
+struct gil_to_libpng_format : mpl::integral_c<unsigned int, formatted_image_base::unsupported_format> {};
 
 /// \todo Add bgr-layout formats as LibPNG actually supports them through
 /// png_set_bgr().
 ///                                           (19.09.2010.) (Domagoj Saric)
-template <> struct gil_to_libpng_format<rgb8_pixel_t  , false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB       | (  8 << 16 )> {};
-template <> struct gil_to_libpng_format<rgba8_pixel_t , false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB_ALPHA | (  8 << 16 )> {};
-template <> struct gil_to_libpng_format<gray8_pixel_t , false> : mpl::integral_c<int, PNG_COLOR_TYPE_GRAY      | (  8 << 16 )> {};
-template <> struct gil_to_libpng_format<rgb16_pixel_t , false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB       | ( 16 << 16 )> {};
-template <> struct gil_to_libpng_format<rgba16_pixel_t, false> : mpl::integral_c<int, PNG_COLOR_TYPE_RGB_ALPHA | ( 16 << 16 )> {};
-template <> struct gil_to_libpng_format<gray16_pixel_t, false> : mpl::integral_c<int, PNG_COLOR_TYPE_GRAY      | ( 16 << 16 )> {};
-
-
-struct view_libpng_format
-{
-    template <typename Pixel, bool IsPlanar>
-    struct apply : gil_to_libpng_format<Pixel, IsPlanar> {};
-};
+template <> struct gil_to_libpng_format<rgb8_pixel_t  , false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_RGB       | (  8 << 16 )> {};
+template <> struct gil_to_libpng_format<rgba8_pixel_t , false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_RGB_ALPHA | (  8 << 16 )> {};
+template <> struct gil_to_libpng_format<gray8_pixel_t , false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_GRAY      | (  8 << 16 )> {};
+template <> struct gil_to_libpng_format<rgb16_pixel_t , false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_RGB       | ( 16 << 16 )> {};
+template <> struct gil_to_libpng_format<rgba16_pixel_t, false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_RGB_ALPHA | ( 16 << 16 )> {};
+template <> struct gil_to_libpng_format<gray16_pixel_t, false> : mpl::integral_c<unsigned int, PNG_COLOR_TYPE_GRAY      | ( 16 << 16 )> {};
 
 
 template <typename Pixel, bool IsPlanar>
-struct is_view_supported : mpl::bool_<view_libpng_format::apply<Pixel, IsPlanar>::value != -1> {};
+struct libpng_is_supported : mpl::bool_<gil_to_libpng_format<Pixel, IsPlanar>::value != -1> {};
+
+template <typename View>
+struct libpng_is_view_supported : libpng_is_supported<typename View::value_type, is_planar<View>::value> {};
 
 
 typedef mpl::vector6
@@ -86,29 +82,27 @@ struct libpng_view_data_t
     template <class View>
     /*explicit*/ libpng_view_data_t( View const & view, libpng_roi::offset_t const offset = 0 )
         :
-        format_( view_libpng_format::apply<View>::value ),
+        format_( gil_to_libpng_format<typename View::value_type, is_planar<View>::value>::value ),
         buffer_( formatted_image_base::get_raw_data( view ) ),
-        offset_( offset ),
+        offset_( offset                   ),
         height_( view.height()            ),
         width_ ( view.width ()            ),
         stride_( view.pixels().row_size() ),
         number_of_channels_( num_channels<View>::value )
     {
-        BOOST_STATIC_ASSERT( is_view_supported<View>::value );
+        BOOST_STATIC_ASSERT( libpng_is_view_supported<View>::value );
     }
 
     void set_format( unsigned int const format ) { format_ = format; }
 
     format_t             /*const*/ format_;
-    unsigned int         /*const*/ colour_type_;
-    unsigned int         /*const*/ bits_per_pixel_;
-    png_byte *           /*const*/ buffer_;
-    libpng_roi::offset_t /*const*/ offset_;
+    png_byte *             const   buffer_;
+    libpng_roi::offset_t   const   offset_;
 
-    unsigned int /*const*/ height_;
-    unsigned int /*const*/ width_ ;
-    unsigned int /*const*/ stride_;
-    unsigned int           number_of_channels_;
+    unsigned int const height_;
+    unsigned int const width_ ;
+    unsigned int const stride_;
+    unsigned int const number_of_channels_;
 };
 
 
@@ -267,7 +261,7 @@ public:
             format_colour_type( view.format_ ),
             PNG_INTERLACE_NONE                ,
             PNG_COMPRESSION_TYPE_DEFAULT      ,
-            PNG_INTRAPIXEL_DIFFERENCING
+            PNG_FILTER_TYPE_DEFAULT
         );
 
         //::png_set_invert_alpha( &png_object() );
@@ -329,10 +323,6 @@ private:
     {
         ::png_set_write_fn( &png_object(), p_target_object, write_data_fn, output_flush_fn );
     }
-
-private:
-    jpeg_destination_mgr       destination_manager_;
-    array<unsigned char, 4096> write_buffer_       ;
 };
 
 
@@ -383,20 +373,25 @@ class libpng_image;
 template <>
 struct formatted_image_traits<libpng_image>
 {
-    typedef         int                            format_t;
     typedef detail::libpng_supported_pixel_formats supported_pixel_formats_t;
     typedef detail::libpng_roi                     roi_t;
-    typedef detail::view_libpng_format             gil_to_native_format;
     typedef detail::libpng_view_data_t             view_data_t;
+    typedef detail::libpng_view_data_t::format_t   format_t;
+
+    struct gil_to_native_format
+    {
+        template <typename Pixel, bool IsPlanar>
+        struct apply : detail::gil_to_libpng_format<Pixel, IsPlanar> {};
+    };
 
     template <typename Pixel, bool IsPlanar>
-    struct is_supported : detail::is_view_supported<Pixel, IsPlanar> {};
+    struct is_supported : detail::libpng_is_supported<Pixel, IsPlanar> {};
 
     typedef mpl::map3
             <
                 mpl::pair<memory_chunk_t        , detail::seekable_input_memory_range_extender<libpng_image> >,
                 mpl::pair<FILE                  ,                                              libpng_image  >,
-                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender      <libpng_image> >
+                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libpng_image> >
             > readers;
 
     typedef mpl::map2

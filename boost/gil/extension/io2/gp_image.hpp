@@ -57,9 +57,7 @@ template <Gdiplus::PixelFormat gp_format> struct pixel_size              : mpl::
 typedef bgra_layout_t gp_alpha_layout_t;
 typedef bgr_layout_t  gp_layout_t;
 
-
 typedef packed_pixel_type<uint16_t, mpl::vector3_c<unsigned,5,6,5>, gp_layout_t>::type gp_bgr565_pixel_t;
-
 
 template <typename Pixel, bool IsPlanar>
 struct gil_to_gp_format : mpl::integral_c<Gdiplus::PixelFormat, PixelFormatUndefined> {};
@@ -73,6 +71,10 @@ template <> struct gil_to_gp_format<bgra16_pixel_t   , false> : mpl::integral_c<
 #if (GDIPVER >= 0x0110)
 template <> struct gil_to_gp_format<cmyk8_pixel_t    , false> : mpl::integral_c<Gdiplus::PixelFormat, PixelFormat32bppCMYK     > {};
 #endif // (GDIPVER >= 0x0110)
+
+
+template <typename Pixel, bool IsPlanar>
+struct gp_is_supported : is_supported<gil_to_gp_format<Pixel, IsPlanar>::value>{};
 
 
 typedef mpl::
@@ -89,13 +91,6 @@ typedef mpl::
     ,image<cmyk8_pixel_t   , false>
     #endif
 > gp_supported_pixel_formats;
-
-
-struct view_gp_format
-{
-    template <typename Pixel, bool IsPlanar>
-    struct apply : gil_to_gp_format<Pixel, IsPlanar> {};
-};
 
 
 typedef iterator_range<TCHAR const *> string_chunk_t;
@@ -182,7 +177,7 @@ public:
     template <class View>
     explicit gp_writer( View & view )
     {
-        BOOST_STATIC_ASSERT( is_supported<view_gp_format::apply<View>::value>::value );
+        BOOST_STATIC_ASSERT(( gp_is_supported<typename View::value_type, is_planar<View>::value>::value ));
 
         // http://msdn.microsoft.com/en-us/library/ms536315(VS.85).aspx
         // stride has to be a multiple of 4 bytes
@@ -195,7 +190,7 @@ public:
                 view.width (),
                 view.height(),
                 view.pixels().row_size(),
-                view_gp_format::apply<View>::value,
+                gil_to_gp_format<typename View::value_type, is_planar<View>::value>::value,
                 formatted_image_base::get_raw_data( view ),
                 &lib_object().first
             )
@@ -274,10 +269,14 @@ struct formatted_image_traits<gp_image>
 
     typedef detail::gp_roi roi_t;
 
-    typedef detail::view_gp_format gil_to_native_format;
+    struct gil_to_native_format
+    {
+        template <typename Pixel, bool IsPlanar>
+        struct apply : detail::gil_to_gp_format<Pixel, IsPlanar> {};
+    };
 
     template <typename Pixel, bool IsPlanar>
-    struct is_supported : detail::is_supported<gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<Pixel, IsPlanar>::value> {};
+    struct is_supported : detail::gp_is_supported<Pixel, IsPlanar> {};
 
     typedef mpl::map5
     <
@@ -324,12 +323,12 @@ struct formatted_image_traits<gp_image>
         {
             using namespace detail;
 
-            BOOST_STATIC_ASSERT( is_supported<typename get_original_view_t<View>::type>::value );
+            BOOST_STATIC_ASSERT(( is_supported<typename View::value_type, is_planar<View>::value>::value ));
 
             Width       = view.width ();
             Height      = view.height();
             Stride      = view.pixels().row_size();
-            PixelFormat = gil_to_native_format<View>::value;
+            PixelFormat = detail::gil_to_gp_format<typename View::value_type, is_planar<View>::value>::value;
             Scan0       = formatted_image_base::get_raw_data( view );
             Reserved    = 0;
         }
