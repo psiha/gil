@@ -334,10 +334,17 @@ public:
     typedef unsigned int image_type_id;
     static image_type_id const unsupported_format = static_cast<image_type_id>( -1 );
 
+public: // Low-level (row, strip, tile) access
     struct sequential_row_access_state { BOOST_STATIC_CONSTANT( bool, throws_on_error = true ); };
 
-public:
     static sequential_row_access_state begin_sequential_row_access() { return sequential_row_access_state(); }
+
+    static bool can_do_row_access  () { return true ; }
+    static bool can_do_strip_access() { return false; }
+    static bool can_do_tile_access () { return false; }
+
+    static bool can_do_roi_access         () { return false; }
+    static bool can_do_vertical_roi_access() { return true ; }
 
 protected:
     static bool dimensions_mismatch( dimensions_t const & mine, dimensions_t const & other ) { return mine != other; }
@@ -523,19 +530,19 @@ public:
     typedef typename formatted_image_traits<Impl>::roi_t                     roi;
     typedef typename roi::offset_t                                           offset_t;
 
-    template <typename PixelType, typename IsPlanar>
+    template <typename PixelType, bool IsPlanar>
     struct native_format
-        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar::value>::type
+        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
     {};
 
     template <typename PixelType, typename IsPlanar>
-    struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar> {};
+    struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar::value> {};
 
     template <typename PixelType, bool IsPlanar>
-    struct get_native_format<image<PixelType, IsPlanar> > : native_format<PixelType, mpl::bool_<IsPlanar> > {};
+    struct get_native_format<image<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar > {};
 
     template <typename Locator>
-    struct get_native_format<image_view<Locator> > : native_format<typename image_view<Locator>::value_type, is_planar<image_view<Locator> > > {};
+    struct get_native_format<image_view<Locator> > : native_format<typename image_view<Locator>::value_type, is_planar<image_view<Locator> >::value> {};
 
     template <class View>
     struct has_supported_format
@@ -722,18 +729,7 @@ protected:
     template <typename View>
     bool can_do_inplace_transform( typename formatted_image_traits<Impl>::format_t const my_format ) const
     {
-        return ( impl().format_size( my_format ) == static_cast<std::size_t>( memunit_step( get_original_view_t<View>::type::x_iterator() ) ) );
-    }
-
-    // A generic implementation...impl classes are encouraged to provide more
-    // efficient overrides...
-    static image_type_id image_format_id( format_t const closest_gil_supported_format )
-    {
-        // This (linear search) will be transformed into a switch...
-        image_id_finder finder( closest_gil_supported_format );
-        mpl::for_each<valid_type_id_range_t>( ref( finder ) );
-        BOOST_ASSERT( finder.image_id_ != unsupported_format );
-        return finder.image_id_;
+        return ( impl().cached_format_size( my_format ) == static_cast<std::size_t>( memunit_step( get_original_view_t<View>::type::x_iterator() ) ) );
     }
 
     template <typename View>
@@ -759,6 +755,28 @@ protected:
             subview_for_offset( offset_view ),
             offset_view.offset()
         );
+    }
+
+public: // Low-level (row, strip, tile) access
+    std::size_t pixel_size() const
+    {
+        return impl().cached_format_size( impl().format() );
+    }
+
+    std::size_t row_size() const
+    {
+        return impl().pixel_size() * impl().dimensions().x;
+    }
+
+    // A generic implementation...impl classes are encouraged to provide more
+    // efficient overrides...
+    static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    {
+        // This (linear search) will be transformed into a switch...
+        image_id_finder finder( closest_gil_supported_format );
+        mpl::for_each<valid_type_id_range_t>( ref( finder ) );
+        BOOST_ASSERT( finder.image_id_ != unsupported_format );
+        return finder.image_id_;
     }
 
 public: // Views...

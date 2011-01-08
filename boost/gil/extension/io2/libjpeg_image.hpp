@@ -509,34 +509,28 @@ public:
         }
     }
 
-    static std::size_t format_size( format_t const format )
+    point2<std::ptrdiff_t> dimensions() const
     {
-        switch ( format )
+        // Implementation note:
+        //   A user might have setup output image scaling through the low-level
+        // lib_object accessor.
+        //                                    (17.10.2010.) (Domagoj Saric)
+        if ( dirty_output_dimensions_ )
         {
-            case JCS_RGB:
-            case JCS_YCbCr:
-                return 3;
-            case JCS_CMYK:
-            case JCS_YCCK:
-                return 4;
-            case JCS_GRAYSCALE:
-                return 1;
-
-            default:
-                BOOST_ASSERT( !"Invalid or unknown format specified." );
-                BF_UNREACHABLE_CODE
-                return 0;
+            jpeg_calc_output_dimensions( &const_cast<libjpeg_image &>( *this ).lib_object() );
+            dirty_output_dimensions_ = false;
         }
+        return point2<std::ptrdiff_t>( decompressor().output_width, decompressor().output_height );
     }
 
-    //...zzz...
-    //std::size_t format_size( format_t const format ) const
-    //{
-    //    BOOST_ASSERT( format_size( format ) == decompressor().output_components );
-    //    BOOST_ASSERT( decompressor().out_color_components == decompressor().output_components );
-    //    ignore_unused_variable_warning( format );
-    //    return decompressor().output_components;
-    //}
+public: // Low-level (row, strip, tile) access
+    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
+    {
+        read_scanline( p_row_storage );
+    }
+
+    jpeg_decompress_struct       & lib_object()       { dirty_output_dimensions_ = true; return decompressor(); }
+    jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
 
 public: /// \ingroup Construction
     explicit libjpeg_image( memory_chunk_t & memory_chunk )
@@ -567,32 +561,9 @@ public: /// \ingroup Construction
         read_header();
     }
 
-public:
-    point2<std::ptrdiff_t> dimensions() const
-    {
-        // Implementation note:
-        //   A user might have setup output image scaling through the low-level
-        // lib_object accessor.
-        //                                    (17.10.2010.) (Domagoj Saric)
-        if ( dirty_output_dimensions_ )
-        {
-            jpeg_calc_output_dimensions( &const_cast<libjpeg_image &>( *this ).lib_object() );
-            dirty_output_dimensions_ = false;
-        }
-        return point2<std::ptrdiff_t>( decompressor().output_width, decompressor().output_height );
-    }
-
-public: // Low-level (row, strip, tile) access
-    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
-    {
-        read_scanline( p_row_storage );
-    }
-
-    jpeg_decompress_struct       & lib_object()       { dirty_output_dimensions_ = true; return decompressor(); }
-    jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
-
 private: // Private interface for the base formatted_image<> class.
     friend base_t;
+
     void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const throw(...)
     {
         setup_decompression( view_data );
@@ -633,6 +604,7 @@ private: // Private interface for the base formatted_image<> class.
             scanlines[ 3 ] = scanlines[ 2 ] + view_data.stride_;
         }
     }
+
 
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
@@ -683,12 +655,34 @@ private: // Private interface for the base formatted_image<> class.
         }
     }
 
+
     void raw_copy_to_prepared_view( detail::view_data_t const & view_data ) const
     {
         BOOST_ASSERT( view_data.width_  == static_cast<unsigned int>( dimensions().x ) );
         BOOST_ASSERT( view_data.height_ == static_cast<unsigned int>( dimensions().y ) );
         BOOST_ASSERT( view_data.format_ == closest_gil_supported_format()              );
         raw_convert_to_prepared_view( view_data );
+    }
+
+
+    static std::size_t cached_format_size( format_t const format )
+    {
+        switch ( format )
+        {
+            case JCS_RGB:
+            case JCS_YCbCr:
+                return 3;
+            case JCS_CMYK:
+            case JCS_YCCK:
+                return 4;
+            case JCS_GRAYSCALE:
+                return 1;
+
+            default:
+                BOOST_ASSERT( !"Invalid or unknown format specified." );
+                BF_UNREACHABLE_CODE
+                return 0;
+        }
     }
 
 private:

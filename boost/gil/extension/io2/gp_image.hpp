@@ -394,73 +394,6 @@ public:
         return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
     }
 
-    static std::size_t format_size( format_t const format )
-    {
-        return Gdiplus::GetPixelFormatSize( format );
-    }
-
-public: // Low-level (row, strip, tile) access
-    class sequential_row_access_state
-        :
-        private detail::cumulative_result
-    {
-    public:
-        using detail::cumulative_result::failed;
-        void throw_if_error() const { detail::cumulative_result::throw_if_error( "GDI+ failure" ); }
-
-        BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
-
-    private:
-        sequential_row_access_state( gp_image const & source_image )
-            :
-            roi_( 0, 0, source_image.dimensions().x, 1 )
-        {
-            bitmapData_.Width  = roi_.Width;
-            bitmapData_.Height = 1;
-            bitmapData_.PixelFormat = source_image.format();
-            bitmapData_.Stride = bitmapData_.Width * source_image.format_size( bitmapData_.PixelFormat );
-            bitmapData_.Reserved = 0;
-        }
-
-    private: friend gp_image;
-        Gdiplus::Rect       roi_       ;
-        Gdiplus::BitmapData bitmapData_;
-    };
-
-    sequential_row_access_state begin_sequential_row_access() const { return sequential_row_access_state( *this ); }
-
-    /// \todo Kill duplication with raw_convert_to_prepared_view().
-    ///                                       (04.01.2011.) (Domagoj Saric)
-    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage ) const
-    {
-        using namespace detail ;
-        using namespace Gdiplus;
-
-        state.bitmapData_.Scan0 = p_row_storage;
-
-        state.accumulate_equal
-        (
-            DllExports::GdipBitmapLockBits
-            (
-                pBitmap_,
-                &state.roi_,
-                ImageLockModeRead | ImageLockModeUserInputBuf,
-                state.bitmapData_.PixelFormat,
-                &state.bitmapData_
-            ),
-            Gdiplus::Ok
-        );
-        verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &state.bitmapData_ ) );
-
-        ++state.roi_.Y;
-    }
-
-    ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
-    ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
-
-private: // Private formatted_image_base interface.
-    friend base_t;
-
     format_t format() const
     {
         format_t pixel_format;
@@ -532,7 +465,70 @@ private: // Private formatted_image_base interface.
         }
     }
 
-private:
+public: // Low-level (row, strip, tile) access
+    static bool can_do_roi_access() { return true; }
+
+    class sequential_row_access_state
+        :
+        private detail::cumulative_result
+    {
+    public:
+        using detail::cumulative_result::failed;
+        void throw_if_error() const { detail::cumulative_result::throw_if_error( "GDI+ failure" ); }
+
+        BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
+
+    private:
+        sequential_row_access_state( gp_image const & source_image )
+            :
+            roi_( 0, 0, source_image.dimensions().x, 1 )
+        {
+            bitmapData_.Width  = roi_.Width;
+            bitmapData_.Height = 1;
+            bitmapData_.PixelFormat = source_image.format();
+            bitmapData_.Stride = bitmapData_.Width * source_image.cached_format_size( bitmapData_.PixelFormat );
+            bitmapData_.Reserved = 0;
+        }
+
+    private: friend gp_image;
+        Gdiplus::Rect       roi_       ;
+        Gdiplus::BitmapData bitmapData_;
+    };
+
+    sequential_row_access_state begin_sequential_row_access() const { return sequential_row_access_state( *this ); }
+
+    /// \todo Kill duplication with raw_convert_to_prepared_view().
+    ///                                       (04.01.2011.) (Domagoj Saric)
+    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage ) const
+    {
+        using namespace detail ;
+        using namespace Gdiplus;
+
+        state.bitmapData_.Scan0 = p_row_storage;
+
+        state.accumulate_equal
+        (
+            DllExports::GdipBitmapLockBits
+            (
+                pBitmap_,
+                &state.roi_,
+                ImageLockModeRead | ImageLockModeUserInputBuf,
+                state.bitmapData_.PixelFormat,
+                &state.bitmapData_
+            ),
+            Gdiplus::Ok
+        );
+        verify_result( DllExports::GdipBitmapUnlockBits( pBitmap_, &state.bitmapData_ ) );
+
+        ++state.roi_.Y;
+    }
+
+    ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
+    ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
+
+private: // Private formatted_image_base interface.
+    friend base_t;
+
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
     {
@@ -607,6 +603,12 @@ private:
         //function...
         //BOOST_ASSERT( view_data.PixelFormat ==                    format    ()     );
         raw_convert_to_prepared_view( view_data );
+    }
+
+
+    static std::size_t cached_format_size( format_t const format )
+    {
+        return Gdiplus::GetPixelFormatSize( format );
     }
 
 private:

@@ -543,13 +543,13 @@ public:
     format_t const & format                      () const { return format_.number; }
     format_t const & closest_gil_supported_format() const { return format()      ; }
 
-    static std::size_t format_size( format_t const format )
-    {
-        full_format_t::format_bitfield const & bits( reinterpret_cast<full_format_t const &>( format ).bits );
-        return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
-    }
-
 public: // Low-level (row, strip, tile) access
+    bool can_do_row_access  () const { return !can_do_tile_access(); }
+    bool can_do_strip_access() const { return /*...yet to implement...can_do_row_access();*/ false; }
+    bool can_do_tile_access () const { return ::TIFFIsTiled( &lib_object() ) != 0; }
+
+    std::size_t tile_size() const { return ::TIFFTileSize( &lib_object() ); }
+
     class sequential_row_access_state
         :
         private detail::libtiff_base::cumulative_result
@@ -735,7 +735,7 @@ private: // Private formatted_image_base interface.
     {
         cumulative_result result;
 
-        if ( ::TIFFIsTiled( &lib_object() ) )
+        if ( can_do_tile_access() )
         {
             tile_setup_t setup( *this, view_data.dimensions_, view_data.offset_, false );
 
@@ -1096,6 +1096,12 @@ private: // Private formatted_image_base interface.
         }
 
         result.throw_if_error();
+    }
+
+    static std::size_t cached_format_size( format_t const format )
+    {
+        full_format_t::format_bitfield const & bits( reinterpret_cast<full_format_t const &>( format ).bits );
+        return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
     }
 
 private:

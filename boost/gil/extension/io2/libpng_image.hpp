@@ -465,12 +465,7 @@ public:
         }
     }
 
-    std::size_t format_size( format_t const format ) const
-    {
-        return number_of_channels() * format_bit_depth( format ) / 8;
-    }
-
-    std::size_t format_size() const
+    std::size_t pixel_size() const
     {
         return number_of_channels() * bit_depth() / 8;
     }
@@ -648,6 +643,11 @@ private: // Private formatted_image_base interface.
                 memunit_advance( p_row, view_data.stride_ );
             }
         }
+    }
+
+    std::size_t cached_format_size( format_t const format ) const
+    {
+        return number_of_channels() * format_bit_depth( format ) / 8;
     }
 
 private:

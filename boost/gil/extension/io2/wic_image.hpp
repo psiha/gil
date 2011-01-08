@@ -418,21 +418,24 @@ public:
         return result;
     }
 
-    static std::size_t format_size( format_t /*const*/ format )
+    /*format_t*/WICPixelFormatGUID format() const
     {
-        using namespace detail;
-        com_scoped_ptr<IWICComponentInfo> p_component_info;
-        ensure_result( wic_factory::singleton().CreateComponentInfo( format, &p_component_info ) );
-        //com_scoped_ptr<IWICPixelFormatInfo> p_pixel_format_info;
-        //p_component_info->QueryInterface( );IID_IWICPixelFormatInfo
-        com_scoped_ptr<IWICPixelFormatInfo> const p_pixel_format_info( *p_component_info );
-        io_error_if_not( p_pixel_format_info, "WIC failure" );
-        unsigned int bits_per_pixel;
-        verify_result( p_pixel_format_info->GetBitsPerPixel( &bits_per_pixel ) );
-        return bits_per_pixel;
+        WICPixelFormatGUID pixel_format;
+        detail::verify_result( frame_decoder().GetPixelFormat( &pixel_format ) );
+        //...zzz...check that it is a supported format...
+        return pixel_format;
+    }
+
+    /*format_t*/WICPixelFormatGUID closest_gil_supported_format() const { return format(); }
+
+    image_type_id current_image_format_id() const
+    {
+        return image_format_id( closest_gil_supported_format() );
     }
 
 public: // Low-level (row, strip, tile) access
+    static bool can_do_roi_access() { return true; }
+
     class sequential_row_access_state
         :
         private detail::cumulative_result
@@ -447,7 +450,7 @@ public: // Low-level (row, strip, tile) access
         sequential_row_access_state( wic_image const & source_image )
             :
             roi_   ( 0, 0, source_image.dimensions().x, 1 ),
-            stride_( roi_.X * source_image.format_size( source_image.format() ) )
+            stride_( roi_.X * source_image.pixel_size()   )
         {}
 
     private: friend wic_image;
@@ -477,23 +480,6 @@ public: // Low-level (row, strip, tile) access
 
 private: // Private formatted_image_base interface.
     friend base_t;
-
-    //...zzz...cleanup...
-    /*format_t*/WICPixelFormatGUID format() const
-    {
-        WICPixelFormatGUID pixel_format;
-        detail::verify_result( frame_decoder().GetPixelFormat( &pixel_format ) );
-        //...zzz...check that it is a supported format...
-        return pixel_format;
-    }
-
-    /*format_t*/WICPixelFormatGUID closest_gil_supported_format() const { return format(); }
-
-    image_type_id current_image_format_id() const
-    {
-        return image_format_id( closest_gil_supported_format() );
-    }
-
 
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
@@ -566,6 +552,21 @@ private: // Private formatted_image_base interface.
                 view_data.p_buffer_
             )
         );
+    }
+
+
+    static std::size_t cached_format_size( format_t const format )
+    {
+        using namespace detail;
+        com_scoped_ptr<IWICComponentInfo> p_component_info;
+        ensure_result( wic_factory::singleton().CreateComponentInfo( format, &p_component_info ) );
+        //com_scoped_ptr<IWICPixelFormatInfo> p_pixel_format_info;
+        //p_component_info->QueryInterface( );IID_IWICPixelFormatInfo
+        com_scoped_ptr<IWICPixelFormatInfo> const p_pixel_format_info( *p_component_info );
+        io_error_if_not( p_pixel_format_info, "WIC failure" );
+        unsigned int bits_per_pixel;
+        verify_result( p_pixel_format_info->GetBitsPerPixel( &bits_per_pixel ) );
+        return bits_per_pixel;
     }
 
 private:
