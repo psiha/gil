@@ -77,15 +77,6 @@ template <> struct gil_to_wic_format<bgr16_pixel_t     , false> : format_guid<GU
 template <> struct gil_to_wic_format<bgra16_pixel_t    , false> : format_guid<GUID_WICPixelFormat64bppBGRA  > {};
 template <> struct gil_to_wic_format<cmyk8_pixel_t     , false> : format_guid<GUID_WICPixelFormat32bppCMYK  > {};
 
-template <wic_format_t wic_format>
-struct is_supported_format
-    : is_same
-      <
-        format_guid<wic_format                  >,
-        format_guid<GUID_WICPixelFormatUndefined>
-      >
-{};
-
 
 typedef mpl::vector8
 <
