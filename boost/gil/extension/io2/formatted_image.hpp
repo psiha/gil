@@ -3,7 +3,7 @@
 /// \file formatted_image.hpp
 /// -------------------------
 ///
-/// (to be) Base CRTP class for all image implementation classes/backends.
+/// Base CRTP class for all image implementation classes/backends.
 ///
 /// Copyright (c) Domagoj Saric 2010.
 ///
@@ -389,7 +389,7 @@ protected:
         image.recreate( my_dimensions, alignment );
     }
 
-        
+
     ////////////////////////////////////////////////////////////////////////////
     //
     // subview_for_offset()
@@ -404,7 +404,7 @@ protected:
     /// \throws nothing
     ///
     ////////////////////////////////////////////////////////////////////////////
-    
+
     template <typename View>
     static View const & subview_for_offset( View const & view ) { return view; }
 
@@ -514,12 +514,7 @@ template <class Impl>
 class formatted_image : public formatted_image_base
 {
 private:
-    template <typename T> struct gil_to_native_format;
-
-    template <typename PixelType, typename IsPlanar>
-    struct gil_to_native_format_aux
-        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar::value>::type
-    {};
+    template <typename T> struct get_native_format;
 
 public:
     typedef typename formatted_image_traits<Impl>::format_t format_t;
@@ -529,13 +524,18 @@ public:
     typedef typename roi::offset_t                                           offset_t;
 
     template <typename PixelType, typename IsPlanar>
-    struct gil_to_native_format<mpl::pair<PixelType, IsPlanar > > : gil_to_native_format_aux<PixelType, IsPlanar> {};
+    struct native_format
+        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar::value>::type
+    {};
+
+    template <typename PixelType, typename IsPlanar>
+    struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar> {};
 
     template <typename PixelType, bool IsPlanar>
-    struct gil_to_native_format<image<PixelType, IsPlanar> > : gil_to_native_format_aux<PixelType, mpl::bool_<IsPlanar> > {};
+    struct get_native_format<image<PixelType, IsPlanar> > : native_format<PixelType, mpl::bool_<IsPlanar> > {};
 
     template <typename Locator>
-    struct gil_to_native_format<image_view<Locator> > : gil_to_native_format_aux<typename image_view<Locator>::value_type, is_planar<image_view<Locator> > > {};
+    struct get_native_format<image_view<Locator> > : native_format<typename image_view<Locator>::value_type, is_planar<image_view<Locator> > > {};
 
     template <class View>
     struct has_supported_format
@@ -655,16 +655,16 @@ private:
 
     struct image_id_finder
     {
-        image_id_finder( format_t const format ) : format_( format ), image_id_( static_cast<unsigned int>( -1 ) ) {}
+        image_id_finder( format_t const format ) : format_( format ), image_id_( unsupported_format ) {}
 
         template <typename ImageIndex>
         void operator()( ImageIndex )
         {
             typedef typename mpl::at<supported_pixel_formats, ImageIndex>::type pixel_format_t;
-            format_t const image_format( gil_to_native_format<pixel_format_t>::value );
+            format_t const image_format( get_native_format<pixel_format_t>::value );
             if ( image_format == this->format_ )
             {
-                BOOST_ASSERT( image_id_ == -1 );
+                BOOST_ASSERT( image_id_ == unsupported_format );
                 image_id_ = ImageIndex::value;
             }
         }
@@ -702,7 +702,7 @@ protected:
     template <typename View>
     bool formats_mismatch() const
     {
-        return formats_mismatch( gil_to_native_format<get_original_view_t<View>::type>::value );
+        return formats_mismatch( get_native_format<get_original_view_t<View>::type>::value );
     }
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
@@ -732,7 +732,7 @@ protected:
         // This (linear search) will be transformed into a switch...
         image_id_finder finder( closest_gil_supported_format );
         mpl::for_each<valid_type_id_range_t>( ref( finder ) );
-        BOOST_ASSERT( finder.image_id_ != -1 );
+        BOOST_ASSERT( finder.image_id_ != unsupported_format );
         return finder.image_id_;
     }
 
@@ -813,14 +813,14 @@ public: // Views...
     }
     
     template <typename FormatConverter, typename View>
-    void copy_to( View const & view, ensure_dimensions_match, FormatConverter const & format_converter ) const
+    void copy_to( View const & view, ensure_dimensions_match, FormatConverter & format_converter ) const
     {
         impl().do_ensure_dimensions_match( view );
         impl().copy_to( view, assert_dimensions_match(), format_converter );
     }
 
     template <typename FormatConverter, typename View>
-    void copy_to( View const & view, assert_dimensions_match, FormatConverter const & format_converter ) const
+    void copy_to( View const & view, assert_dimensions_match, FormatConverter & format_converter ) const
     {
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
         impl().convert_to_prepared_view( view, format_converter );
