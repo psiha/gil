@@ -39,7 +39,13 @@ extern "C"
 
 #include <cstdio>
 #include <set>
-#include "io.h"
+#ifdef _MSC_VER
+    #include "io.h"
+#else
+    #include "sys/types.h"
+    #include "sys/stat.h"
+    #include "unistd.h"
+#endif // _MSC_VER
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -185,7 +191,13 @@ inline int FILE_close_proc_nop( thandle_t /*handle*/ )
 
 inline toff_t FILE_size_proc( thandle_t const fd )
 {
-    return /*std*/::_filelength( /*std*/::_fileno( gil_reinterpret_cast<FILE *>( fd ) ) );
+    #ifdef _MSC_VER
+        return /*std*/::_filelength( /*std*/::_fileno( gil_reinterpret_cast<FILE *>( fd ) ) );
+    #else
+        struct stat file_status;
+        BOOST_VERIFY( ::fstat( ::fileno( gil_reinterpret_cast<FILE *>( fd ) ), &file_status ) == 0 );
+        return file_status.st_size;
+    #endif // _MSC_VER
 }
 
 inline int FILE_map_proc( thandle_t /*handle*/, tdata_t * /*pbase*/, toff_t * /*psize*/ )
@@ -264,7 +276,9 @@ struct tiff_view_data_t
 
     void set_format( full_format_t::format_id const format )
     {
-        BOOST_ASSERT( ( format_id_ == format ) && !"libtiff does not provide builtin conversion." );
+        #ifdef _DEBUG
+            BOOST_ASSERT( ( format_id_ == format ) && !"libtiff does not provide builtin conversion." );
+        #endif // _DEBUG
         ignore_unused_variable_warning( format );
     }
 
@@ -560,7 +574,7 @@ public: // Low-level (row, strip, tile) access
 
         BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
 
-    private: friend libtiff_image;
+    private: friend class libtiff_image;
         sequential_row_access_state() : position_( 0 ) {}
 
         unsigned int position_;
@@ -659,8 +673,12 @@ private:
     }
 
 private: // Private formatted_image_base interface.
-    friend base_t;
-    struct tile_setup_t : boost::noncopyable
+    friend class base_t;
+
+    struct tile_setup_t
+        #ifndef __clang__
+            : boost::noncopyable
+        #endif // __clang__
     {
         tile_setup_t( libtiff_image const & source, point2<std::ptrdiff_t> const & dimensions, offset_t const offset, bool const nptcc )
             :
@@ -1189,7 +1207,7 @@ private:
     }
 
     template <typename Pixel>
-    class scanline_buffer_t : noncopyable
+    class scanline_buffer_t
     {
     public:
         scanline_buffer_t( libtiff_image const & tiff, mpl::true_ /*      nptcc  */ ) : buffer_( planar_scanline_buffer_aux( tiff              ) ) {}
@@ -1203,7 +1221,7 @@ private:
     };
 
     template <typename Pixel>
-    class planar_scanline_buffer_t : noncopyable
+    class planar_scanline_buffer_t
     {
     public:
         planar_scanline_buffer_t( libtiff_image & image ) : buffer_( planar_scanline_buffer_aux( tiff ) ) {}

@@ -23,6 +23,8 @@
 #include "detail/libx_shared.hpp"
 #include "detail/shared.hpp"
 
+#include "boost/scoped_array.hpp"
+
 #include "png.h"
 
 #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
@@ -274,8 +276,8 @@ public:
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( error_handler_target() ) )
-                throw_jpeg_error();
+		if ( setjmp( libpng_base::error_handler_target() ) )
+                detail::throw_libpng_error();
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         if ( little_endian() )
@@ -530,8 +532,8 @@ private: // Private formatted_image_base interface.
     {
         using namespace detail;
 
-        std::size_t          const row_length  ( ::png_get_rowbytes( &png_object(), &info_object() ) );
-        scoped_ptr<png_byte> const p_row_buffer( new png_byte[ row_length ]                          );
+        std::size_t            const row_length  ( ::png_get_rowbytes( &png_object(), &info_object() ) );
+        scoped_array<png_byte> const p_row_buffer( new png_byte[ row_length ]                          );
 
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
             if ( setjmp( error_handler_target() ) )

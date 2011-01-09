@@ -25,6 +25,7 @@
 #include "detail/switch.hpp"
 
 #include "boost/gil/extension/dynamic_image/any_image.hpp"
+#include "boost/gil/extension/io/dynamic_io.hpp" //...zzz...
 #include "boost/gil/packed_pixel.hpp"
 #include "boost/gil/planar_pixel_iterator.hpp"
 #include "boost/gil/planar_pixel_reference.hpp"
@@ -46,6 +47,7 @@
 #include <boost/range/iterator_range.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/type_traits/decay.hpp>
+#include <boost/type_traits/is_unsigned.hpp>
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -79,7 +81,7 @@ struct channel_converter<SrcChannelV, packed_channel_value<DestPackedNumBits> >
         typedef detail::channel_convert_to_unsigned  <SrcChannelV> to_unsigned;
         typedef detail::channel_convert_from_unsigned<DstChannelV> from_unsigned;
 
-        if ( std::tr1::is_unsigned<SrcChannelV>::value )
+        if ( is_unsigned<SrcChannelV>::value )
         {
             SrcChannelV  const source_max( detail::unsigned_integral_max_value<SrcChannelV>::value );
             unsigned int const tmp       ( ( static_cast<unsigned short>( src ) << DestPackedNumBits ) - src );
@@ -502,7 +504,7 @@ protected:
         Image & apply()
         {
             image_.move_in( Image() );
-            return image_._dynamic_cast<Image>();
+            return image_. BOOST_NESTED_TEMPLATE _dynamic_cast<Image>();
         }
 
     protected:
@@ -520,9 +522,6 @@ protected:
 template <class Impl>
 class formatted_image : public formatted_image_base
 {
-private:
-    template <typename T> struct get_native_format;
-
 public:
     typedef typename formatted_image_traits<Impl>::format_t format_t;
 
@@ -534,6 +533,8 @@ public:
     struct native_format
         : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
     {};
+
+    template <typename T> struct get_native_format;
 
     template <typename PixelType, typename IsPlanar>
     struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar::value> {};
@@ -595,7 +596,7 @@ public:
         >::type first_layer_wrapper;
 
     public:
-        typedef typename base_writer_t::wrapper
+        typedef typename base_writer_t:: BOOST_NESTED_TEMPLATE wrapper
         <
             first_layer_wrapper,
             Target,
@@ -604,7 +605,7 @@ public:
         > type;
     };
 
-    BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<roi::offset_t, roi::point_t>::value) );
+    BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<typename roi::offset_t, typename roi::point_t>::value) );
 
 protected:
     typedef          formatted_image                           base_t;
@@ -628,7 +629,7 @@ private:
         {}
 
         template <class Image>
-        void apply() { impl_.copy_to( base::apply<Image>(), dimensions_policy(), formats_policy() ); }
+        void apply() { impl_.copy_to( base:: BOOST_NESTED_TEMPLATE apply<Image>(), dimensions_policy(), formats_policy() ); }
 
         template <typename SupportedFormatIndex>
         void operator()( SupportedFormatIndex const & ) { apply<typename mpl::at<SupportedFormatIndex>::type>(); }
@@ -709,7 +710,7 @@ protected:
     template <typename View>
     bool formats_mismatch() const
     {
-        return formats_mismatch( get_native_format<get_original_view_t<View>::type>::value );
+        return formats_mismatch( get_native_format<typename get_original_view_t<View>::type>::value );
     }
 
     bool formats_mismatch( typename formatted_image_traits<Impl>::format_t const other_format ) const
@@ -723,7 +724,7 @@ protected:
     template <typename View>
     bool can_do_inplace_transform() const
     {
-        return can_do_inplace_transform<View>( format() );
+        return can_do_inplace_transform<View>( impl().format() );
     }
 
     template <typename View>
@@ -822,12 +823,12 @@ public: // Views...
     void copy_to( View const & view, assert_dimensions_match, synchronize_formats ) const
     {
         BOOST_ASSERT( !impl().dimensions_mismatch( view ) );
-        bool const can_use_raw
-        (
-            is_supported          <View>::value &&
+        typedef mpl::bool_
+        <
+            has_supported_format  <View>::value &&
             formatted_image_traits<Impl>::builtin_conversion
-        );
-        default_convert_to_worker( view, mpl::bool_<can_use_raw>() );
+        > can_use_raw_t;
+        default_convert_to_worker( view, can_use_raw_t() );
     }
     
     template <typename FormatConverter, typename View>
@@ -944,7 +945,7 @@ private:
         }
 
         template <typename SrcP>
-        typename enable_if<is_pixel<SrcP>>::type
+        typename enable_if<is_pixel<SrcP> >::type
         operator()( SrcP & srcP )
         {
             convert_aux( srcP, is_planar<View>() );
@@ -994,7 +995,7 @@ private:
         void operator()( mpl::integral_c<std::size_t, index> const & ) const
         {
             typedef typename mpl::at_c<supported_pixel_formats, index>::type::view_t my_view_t;
-            impl_.generic_convert_to_prepared_view<my_view_t>( view(), cc() );
+            impl_. BOOST_NESTED_TEMPLATE generic_convert_to_prepared_view<my_view_t>( view(), cc() );
         }
 
         void operator=( generic_converter_t const & other )
@@ -1057,7 +1058,7 @@ private:
             mpl::bool_
             <
                 is_plain_in_memory_view<typename get_original_view_t<View>::type>::value &&
-                is_supported           <                             View       >::value
+                has_supported_format   <                             View       >::value
             >()
         );
     }

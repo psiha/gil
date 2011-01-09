@@ -527,7 +527,7 @@ public: // Low-level (row, strip, tile) access
     ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
 
 private: // Private formatted_image_base interface.
-    friend base_t;
+    friend class base_t;
 
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const

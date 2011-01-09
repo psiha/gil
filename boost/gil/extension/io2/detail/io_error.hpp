@@ -33,12 +33,20 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-inline BF_NOTHROWNOALIAS void io_error( char const * const description )
+inline BF_NORETURN void io_error( char const * const description )
 {
     #ifdef _MSC_VER
-        throw_exception( std::exception( description , 0 ) ); // Assumes the description string is static/non-temporary
+        throw_exception( std::exception( description, 0 ) ); // Assumes the description string is static/non-temporary
     #else
-        throw_exception( std::exception( description     ) );
+        class gil_io_error : public std::exception
+        {
+        public:
+            gil_io_error( char const * const description ) : description_( description ) {}
+            char const * what() const throw() { return description_; }
+        private:
+            char const * const description_;
+        };
+        throw_exception( gil_io_error( description ) );
     #endif // _MSC_VER
 }
 

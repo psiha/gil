@@ -479,7 +479,7 @@ public: // Low-level (row, strip, tile) access
     lib_object_t & lib_object() { return lib_object_; }
 
 private: // Private formatted_image_base interface.
-    friend base_t;
+    friend class base_t;
 
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const
