@@ -466,7 +466,11 @@ private:
     template <typename T>
     void set_field( ttag_t const tag, T value )
     {
-        BOOST_VERIFY( ::TIFFVSetField( &lib_object(), tag, gil_reinterpret_cast<va_list>( &value ) ) );
+        #ifdef _MSC_VER
+            BOOST_VERIFY( ::TIFFVSetField( &lib_object(), tag, gil_reinterpret_cast<va_list>( &value ) ) );
+        #else
+            BOOST_VERIFY( ::TIFFSetField ( &lib_object(), tag,                                 value   ) );
+        #endif // _MSC_VER
     }
 
     template <typename T1, typename T2>
@@ -610,8 +614,13 @@ private:
     template <typename T>
     T get_field( ttag_t const tag ) const
     {
-        T value; T * p_value( &value );
-        BOOST_VERIFY( ::TIFFVGetFieldDefaulted( &lib_object(), tag, gil_reinterpret_cast<va_list>( &p_value ) ) );
+        T value;
+        #ifdef _MSC_VER
+            T * p_value( &value );
+            BOOST_VERIFY( ::TIFFVGetFieldDefaulted( &lib_object(), tag, gil_reinterpret_cast<va_list>( &p_value ) ) );
+        #else
+            BOOST_VERIFY( ::TIFFGetFieldDefaulted ( &lib_object(), tag,                                 &value    ) );
+        #endif // _MSC_VER
         return value;
     }
 
@@ -883,7 +892,7 @@ private: // Private formatted_image_base interface.
 
         unsigned int const number_of_planes( is_planar<MyView>::value ? num_channels<MyView>::value : 1 );
 
-        point2<std::ptrdiff_t> const & dimensions( original_view( view ).dimensions() );
+        dimensions_t const & dimensions( original_view( view ).dimensions() );
 
         ////////////////////////////////////////////////////////////////////////
         // Tiled
@@ -1184,53 +1193,71 @@ private:
         return PlanarPixelIterator( first, second, third, fourth );
     }
 
-    typedef std::pair
-    <
-        scoped_array<unsigned char> const,
-        unsigned char const * const
-    > generic_scanline_buffer_t;
+    // Implementation note:
+    //   Because of plain RVO incapable compilers (like Clang or not the latest
+    // GCCs) a simple std::pair with a scoped_array cannot be used.
+    //                                        (11.01.2011.) (Domagoj Saric)
+    //typedef std::pair
+    //<
+    //    scoped_array<unsigned char> const,
+    //    unsigned char const * const
+    //> generic_scanline_buffer_t;
 
-    static generic_scanline_buffer_t scanline_buffer_aux( TIFF & tiff )
+    class scanline_buffer_base_t : boost::noncopyable
     {
-        unsigned int const scanlineSize( ::TIFFScanlineSize( &tiff ) );
-        unsigned char * const p_buffer( new unsigned char[ scanlineSize ] );
-        return std::make_pair( p_buffer, p_buffer + scanlineSize );
-    }
+    protected:
+        explicit scanline_buffer_base_t( std::size_t const size )
+            :
+            p_begin_( new unsigned char[ size ] ),
+            p_end_  ( p_begin_ + size           )
+        {}
 
-    // This one makes the end pointer point to the end of the scanline/row of
-    // the first plane not the end of the buffer itself...ugh...to be cleaned up...
-    static generic_scanline_buffer_t planar_scanline_buffer_aux( libtiff_image const & tiff )
-    {
-        unsigned int const scanlineSize( tiff.format_bits().bits_per_sample * tiff.dimensions().x / 8 );
-        unsigned char * const p_buffer( new unsigned char[ scanlineSize * tiff.format_bits().samples_per_pixel ] );
-        return std::make_pair( p_buffer, p_buffer + scanlineSize );
-    }
+        // This one makes the end pointer point to the end of the scanline/row
+        // of the first plane not the end of the buffer itself...ugh...to be cleaned up...
+        explicit scanline_buffer_base_t( std::pair<std::size_t, std::size_t> const size_to_allocate_size_to_report_pair )
+            :
+            p_begin_( new unsigned char[ size_to_allocate_size_to_report_pair.first ] ),
+            p_end_  ( p_begin_ + size_to_allocate_size_to_report_pair.second          )
+        {}
 
-    template <typename Pixel>
-    class scanline_buffer_t
-    {
-    public:
-        scanline_buffer_t( libtiff_image const & tiff, mpl::true_ /*      nptcc  */ ) : buffer_( planar_scanline_buffer_aux( tiff              ) ) {}
-        scanline_buffer_t( libtiff_image const & tiff, mpl::false_ /* not nptcc  */ ) : buffer_( scanline_buffer_aux       ( tiff.lib_object() ) ) {} 
+        ~scanline_buffer_base_t() { delete[] p_begin_; }
 
-        Pixel       * begin() const { return gil_reinterpret_cast  <Pixel       *>( buffer_.first.get() ); }
-        Pixel const * end  () const { return gil_reinterpret_cast_c<Pixel const *>( buffer_.second      ); }
+        BF_NOTHROWNORESTRICTNOALIAS unsigned char       * begin() const { return p_begin_; }
+        BF_NOTHROWNORESTRICTNOALIAS unsigned char const * end  () const { return p_end_  ; }
+
+        static std::size_t scanline_buffer_construction( libtiff_image const & tiff )
+        {
+            return ( ::TIFFScanlineSize( &tiff.lib_object() ) );
+        }
+
+        static std::pair<std::size_t, std::size_t> planar_scanline_buffer_construction( libtiff_image const & tiff )
+        {
+            std::size_t const scanline_size  ( tiff.format_bits().bits_per_sample * tiff.dimensions().x / 8 );
+            std::size_t const allocation_size( scanline_size * tiff.format_bits().samples_per_pixel         );
+            return std::pair<std::size_t, std::size_t>( allocation_size, scanline_size );
+        }
 
     private:
-        generic_scanline_buffer_t const buffer_;
+        unsigned char       * const p_begin_;
+        unsigned char const * const p_end_  ;
     };
 
     template <typename Pixel>
-    class planar_scanline_buffer_t
+    class scanline_buffer_t : public scanline_buffer_base_t
     {
     public:
-        planar_scanline_buffer_t( libtiff_image & image ) : buffer_( planar_scanline_buffer_aux( tiff ) ) {}
+        scanline_buffer_t( libtiff_image const & tiff, mpl::true_ /*      nptcc  */ ) : scanline_buffer_base_t( planar_scanline_buffer_construction( tiff ) ) {}
+        scanline_buffer_t( libtiff_image const & tiff, mpl::false_ /* not nptcc  */ ) : scanline_buffer_base_t( scanline_buffer_construction       ( tiff ) ) {}
 
-        Pixel       * begin() const { return gil_reinterpret_cast  <Pixel       *>( buffer_.first.get() ); }
-        Pixel const * end  () const { return gil_reinterpret_cast_c<Pixel const *>( buffer_.second      ); }
+        Pixel       * begin() const { return gil_reinterpret_cast  <Pixel       *>( scanline_buffer_base_t::begin() ); }
+        Pixel const * end  () const { return gil_reinterpret_cast_c<Pixel const *>( scanline_buffer_base_t::end  () ); }
+    };
 
-    private:
-        generic_scanline_buffer_t const buffer_;
+    template <typename Pixel>
+    class planar_scanline_buffer_t : scanline_buffer_t<Pixel>
+    {
+    public:
+        planar_scanline_buffer_t( libtiff_image const & image ) : scanline_buffer_t<Pixel>( tiff, mpl::true_() ) {}
     };
 
     skip_row_results_t BF_NOTHROWNOALIAS skip_to_row

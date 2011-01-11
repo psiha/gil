@@ -189,10 +189,12 @@ protected:
         p_info_( p_info )
     {}
 
+#ifndef NDEBUG
     ~lib_object_t()
     {
         BOOST_ASSERT( !p_png_ && !p_info_ && "The concrete class must do the cleanup!" );
     }
+#endif // NDEBUG
 
     //...zzz...forced by LibPNG into either duplication or this anti-pattern...
     bool is_valid() const { return p_png_ && p_info_; }
@@ -237,6 +239,10 @@ protected:
     {
         return format & 0xFF;
     }
+
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        jmp_buf & error_handler_target() const { return png_object().jmpbuf; }
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 };
 
 
@@ -248,7 +254,10 @@ protected:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class libpng_writer : public libpng_base, public configure_on_write_writer
+class libpng_writer
+    :
+    public libpng_base,
+    public configure_on_write_writer
 {
 public:
     void write_default( libpng_view_data_t const & view )
@@ -276,7 +285,7 @@ public:
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-		if ( setjmp( libpng_base::error_handler_target() ) )
+		if ( setjmp( error_handler_target() ) )
                 detail::throw_libpng_error();
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
@@ -653,10 +662,6 @@ private: // Private formatted_image_base interface.
     }
 
 private:
-    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        jmp_buf & error_handler_target() const { return png_object().jmpbuf; }
-    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-
     void cleanup_and_throw_libpng_error()
     {
         destroy_read_struct();
