@@ -224,9 +224,9 @@ typedef iterator_range<unsigned char       *> writable_memory_chunk_t;
 class memory_mapping
     :
     private writable_memory_chunk_t
-    #ifndef __clang__
+    #ifndef __GNUC__
         ,private boost::noncopyable
-    #endif // __clang__
+    #endif // __GNUC__
 {
 public:
     memory_mapping

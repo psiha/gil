@@ -33,20 +33,27 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
+#ifndef _MSC_VER
+    // Implementation note:
+    //   GCC 4.6.0 chokes if this class is declared locally in io_error().
+    //                                        (12.01.2011.) (Domagoj Saric)
+    class gil_io_error : public std::exception
+    {
+    public:
+        gil_io_error( char const * const description ) : description_( description ) {}
+        char const * what() const throw() { return description_; }
+    private:
+        char const * const description_;
+    };
+#endif
+
+// Assumes the description string is static/non-temporary
 inline BF_NORETURN void io_error( char const * const description )
 {
     #ifdef _MSC_VER
-        throw_exception( std::exception( description, 0 ) ); // Assumes the description string is static/non-temporary
+        throw_exception( std::exception( description, 0 ) );
     #else
-        class gil_io_error : public std::exception
-        {
-        public:
-            gil_io_error( char const * const description ) : description_( description ) {}
-            char const * what() const throw() { return description_; }
-        private:
-            char const * const description_;
-        };
-        throw_exception( gil_io_error( description ) );
+		throw_exception( gil_io_error( description ) );
     #endif // _MSC_VER
 }
 

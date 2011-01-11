@@ -92,7 +92,7 @@ protected:
     struct for_compressor   {};
 
 protected:
-    libjpeg_base( for_decompressor ) throw(...)
+    libjpeg_base( for_decompressor ) throw ( ... )
     {
         initialize_error_handler();
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
@@ -102,7 +102,7 @@ protected:
         jpeg_create_decompress( &decompressor() );
     }
 
-    libjpeg_base( for_compressor ) throw(...)
+    libjpeg_base( for_compressor ) throw ( ... )
     {
         initialize_error_handler();
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
@@ -167,7 +167,7 @@ private:
         common().err = &jerr_;
     }
 
-    static void __cdecl error_exit( j_common_ptr const p_cinfo )
+    static void BF_CDECL error_exit( j_common_ptr const p_cinfo )
     {
         #ifndef NDEBUG
             p_cinfo->err->output_message( p_cinfo );
@@ -176,11 +176,11 @@ private:
         fatal_error_handler( p_cinfo );
     }
 
-    static void __cdecl output_message( j_common_ptr /*p_cinfo*/                    ) {}
-    static void __cdecl emit_message  ( j_common_ptr /*p_cinfo*/, int /*msg_level*/ ) {}
-    static void __cdecl format_message( j_common_ptr /*p_cinfo*/, char * /*buffer*/ ) {}
+    static void BF_CDECL output_message( j_common_ptr /*p_cinfo*/                    ) {}
+    static void BF_CDECL emit_message  ( j_common_ptr /*p_cinfo*/, int /*msg_level*/ ) {}
+    static void BF_CDECL format_message( j_common_ptr /*p_cinfo*/, char * /*buffer*/ ) {}
 
-    static void __cdecl reset_error_mgr( j_common_ptr const p_cinfo )
+    static void BF_CDECL reset_error_mgr( j_common_ptr const p_cinfo )
     {
         BOOST_ASSERT( p_cinfo->err->num_warnings == 0 );
         BOOST_ASSERT( p_cinfo->err->msg_code     == 0 );
@@ -352,7 +352,7 @@ private:
         destination_manager_.term_destination = &term_and_close_FILE_destination;
     }
 
-    static void __cdecl init_FILE_destination( j_compress_ptr const p_cinfo )
+    static void BF_CDECL init_FILE_destination( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( get_writer( p_cinfo ) );
 
@@ -375,7 +375,7 @@ private:
             fatal_error_handler( &common() );
     }
     
-    static boolean __cdecl empty_FILE_buffer( j_compress_ptr const p_cinfo )
+    static boolean BF_CDECL empty_FILE_buffer( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( get_writer( p_cinfo ) );
         writer.write_FILE_bytes( writer.write_buffer_.size() );
@@ -383,7 +383,7 @@ private:
         return true;
     }
 
-    static void __cdecl term_FILE_destination( j_compress_ptr const p_cinfo )
+    static void BF_CDECL term_FILE_destination( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( get_writer( p_cinfo ) );
 
@@ -393,7 +393,7 @@ private:
     }
 
     // Ensure that jpeg_finish_compress() is called so that this gets called...
-    static void __cdecl term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
+    static void BF_CDECL term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
     {
         term_FILE_destination( p_cinfo );
         BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
@@ -863,7 +863,7 @@ private:
     }
 
 
-    static void __cdecl init_FILE_source( j_decompress_ptr const p_cinfo )
+    static void BF_CDECL init_FILE_source( j_decompress_ptr const p_cinfo )
     {
         libjpeg_image & reader( get_reader( p_cinfo ) );
 
@@ -871,7 +871,7 @@ private:
         reader.source_manager_.bytes_in_buffer = 0;
     }
 
-    static boolean __cdecl fill_FILE_buffer( j_decompress_ptr const p_cinfo )
+    static boolean BF_CDECL fill_FILE_buffer( j_decompress_ptr const p_cinfo )
     {
         libjpeg_image & reader( get_reader( p_cinfo ) );
 
@@ -902,7 +902,7 @@ private:
         return true;
     }
 
-    static void __cdecl skip_FILE_data( j_decompress_ptr const p_cinfo, long num_bytes )
+    static void BF_CDECL skip_FILE_data( j_decompress_ptr const p_cinfo, long num_bytes )
     {
         libjpeg_image & reader( get_reader( p_cinfo ) );
 
@@ -920,28 +920,28 @@ private:
         }
     }
 
-    static void __cdecl term_FILE_source( j_decompress_ptr /*p_cinfo*/ )
+    static void BF_CDECL term_FILE_source( j_decompress_ptr /*p_cinfo*/ )
     {
     }
 
     // Ensure that jpeg_finish_decompress() is called so that this gets called...
-    static void __cdecl term_and_close_FILE_source( j_decompress_ptr const p_cinfo )
+    static void BF_CDECL term_and_close_FILE_source( j_decompress_ptr const p_cinfo )
     {
         term_FILE_source( p_cinfo );
         BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( get_reader( p_cinfo ).decompressor().client_data ) ) == 0 );
     }
 
-    static void __cdecl init_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
+    static void BF_CDECL init_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
     {
     }
 
-    static boolean __cdecl fill_memory_chunk_buffer( j_decompress_ptr /*p_cinfo*/ )
+    static boolean BF_CDECL fill_memory_chunk_buffer( j_decompress_ptr /*p_cinfo*/ )
     {
         BF_UNREACHABLE_CODE
         return true;
     }
 
-    static void __cdecl skip_memory_chunk_data( j_decompress_ptr const p_cinfo, long num_bytes )
+    static void BF_CDECL skip_memory_chunk_data( j_decompress_ptr const p_cinfo, long num_bytes )
     {
         libjpeg_image & reader( get_reader( p_cinfo ) );
 
@@ -950,7 +950,7 @@ private:
         reader.source_manager_.bytes_in_buffer -= num_bytes;
     }
 
-    static void __cdecl term_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
+    static void BF_CDECL term_memory_chunk_source( j_decompress_ptr /*p_cinfo*/ )
     {
     }
 

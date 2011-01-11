@@ -685,9 +685,9 @@ private: // Private formatted_image_base interface.
     friend class base_t;
 
     struct tile_setup_t
-        #ifndef __clang__
+        #ifndef __GNUC__
             : boost::noncopyable
-        #endif // __clang__
+        #endif // __GNUC__
     {
         tile_setup_t( libtiff_image const & source, point2<std::ptrdiff_t> const & dimensions, offset_t const offset, bool const nptcc )
             :
@@ -878,19 +878,19 @@ private: // Private formatted_image_base interface.
                 mpl::identity<MyView>
             >::type::value_type my_pixel_t;
 
-        bool const nondirect_planar_to_contig_conversion
-        (
+        typedef mpl::bool_
+        <
              is_planar<MyView                >::value &&
             !is_planar<original_target_view_t>::value &&
             (
                 !is_same<typename color_space_type    <MyView>::type, typename color_space_type    <original_target_view_t>::type>::value ||
                 !is_same<typename channel_mapping_type<MyView>::type, typename channel_mapping_type<original_target_view_t>::type>::value
             )
-        );
+        > nondirect_planar_to_contig_conversion_t;
 
         cumulative_result result;
 
-        unsigned int const number_of_planes( is_planar<MyView>::value ? num_channels<MyView>::value : 1 );
+        typedef mpl::int_<is_planar<MyView>::value ? num_channels<MyView>::value : 1> number_of_planes_t;
 
         dimensions_t const & dimensions( original_view( view ).dimensions() );
 
@@ -905,13 +905,13 @@ private: // Private formatted_image_base interface.
                 *this,
                 dimensions,
                 get_offset<offset_t>( view ),
-                nondirect_planar_to_contig_conversion
+                nondirect_planar_to_contig_conversion_t::value
             );
 
-            unsigned int const tiles_per_plane( setup.number_of_tiles / number_of_planes );
-            ttile_t            current_tile   ( 0                                        );
+            unsigned int const tiles_per_plane( setup.number_of_tiles / number_of_planes_t::value );
+            ttile_t            current_tile   ( 0                                                 );
 
-            if ( nondirect_planar_to_contig_conversion )
+            if ( nondirect_planar_to_contig_conversion_t::value )
             {
                 // For NPTCC there is no need for target view
                 // planar<->non-planar adjustment because here we read whole
@@ -924,7 +924,7 @@ private: // Private formatted_image_base interface.
                     (
                         setup.p_tile_buffer.get(),
                         setup.tile_size_bytes,
-                        mpl::int_<number_of_planes>()
+                        number_of_planes_t()
                     )
                 );
 
@@ -935,7 +935,7 @@ private: // Private formatted_image_base interface.
                     bool         const last_row_tile  ( !--setup.current_row_tiles_remaining                         );
                     unsigned int const this_tile_width( last_row_tile ? setup.last_row_tile_width : setup.tile_width );
 
-                    for ( unsigned int channel_tile( 0 ); channel_tile < number_of_planes; ++channel_tile )
+                    for ( unsigned int channel_tile( 0 ); channel_tile < number_of_planes_t::value; ++channel_tile )
                     {
                         ttile_t const raw_tile_number( current_tile + ( channel_tile * tiles_per_plane ) );
                         result.accumulate_equal
@@ -989,7 +989,7 @@ private: // Private formatted_image_base interface.
                 for
                 (
                     unsigned int plane( 0 ), current_plane_end_tile( tiles_per_plane );
-                    plane < number_of_planes;
+                    plane < number_of_planes_t::value;
                     ++plane, current_plane_end_tile += tiles_per_plane
                 )
                 {
@@ -1055,9 +1055,9 @@ private: // Private formatted_image_base interface.
         // Striped
         ////////////////////////////////////////////////////////////////////////
         {
-            scanline_buffer_t<my_pixel_t> const scanline_buffer( *this, mpl::bool_<nondirect_planar_to_contig_conversion>() );
+            scanline_buffer_t<my_pixel_t> const scanline_buffer( *this, nondirect_planar_to_contig_conversion_t::value() );
 
-            if ( nondirect_planar_to_contig_conversion )
+            if ( nondirect_planar_to_contig_conversion_t::value )
             {
                 typename original_target_view_t::y_iterator p_target( original_view( view ).y_at( 0, 0 ) );
                 unsigned int       row       ( get_offset<offset_t>( view ) );
@@ -1069,13 +1069,13 @@ private: // Private formatted_image_base interface.
                     (
                         scanline_buffer.begin(),
                         dimensions.x,
-                        mpl::int_<number_of_planes>()
+                        number_of_planes_t()
                     )
                 );
 
                 while ( row != target_row )
                 {
-                    for ( unsigned int plane( 0 ); plane < number_of_planes; ++plane )
+                    for ( unsigned int plane( 0 ); plane < number_of_planes_t::value; ++plane )
                     {
                         tdata_t const p_buffer( &(*buffer_iterator)[ plane ] );
                         //...zzz...yup...not the most efficient thing in the universe...
@@ -1096,7 +1096,7 @@ private: // Private formatted_image_base interface.
             }
             else
             {
-                for ( unsigned int plane( 0 ); plane < number_of_planes; ++plane )
+                for ( unsigned int plane( 0 ); plane < number_of_planes_t::value; ++plane )
                 {
                     if ( is_offset_view<TargetView>::value )
                         skip_to_row( get_offset<offset_t>( view ), plane, scanline_buffer.begin(), result );
