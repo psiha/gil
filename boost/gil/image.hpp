@@ -28,6 +28,8 @@
 #include "metafunctions.hpp"
 #include "algorithm.hpp"
 
+#include "extension/io2/detail/platform_specifics.hpp" //...zzz...BF_ASSUME
+
 namespace boost { namespace gil {
 
 //#ifdef _MSC_VER
@@ -177,11 +179,11 @@ private:
             if (!detail::has_trivial_pixel_constructor<view_t, is_planar<view_t>::value>::value)
                 default_construct_pixels(_view);
         } catch(...) {
-            __assume
-            (
+            BF_ASSUME
+            ((
                 !view_is_basic<view_t>                                                  ::value &&
                 !detail::has_trivial_pixel_constructor<view_t, is_planar<view_t>::value>::value
-            );
+            ));
             deallocate(dimensions);
             throw;
         }
