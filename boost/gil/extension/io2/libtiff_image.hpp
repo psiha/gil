@@ -566,7 +566,17 @@ public: // Low-level (row, strip, tile) access
     bool can_do_strip_access() const { return /*...yet to implement...can_do_row_access();*/ false; }
     bool can_do_tile_access () const { return ::TIFFIsTiled( &lib_object() ) != 0; }
 
-    std::size_t tile_size() const { return ::TIFFTileSize( &lib_object() ); }
+    std::size_t tile_size    () const { return ::TIFFTileSize   ( &lib_object() ); }
+    std::size_t tile_row_size() const { return ::TIFFTileRowSize( &lib_object() ); }
+    point2<std::ptrdiff_t> tile_dimensions() const
+    {
+        BOOST_ASSERT( can_do_tile_access() );
+        return point2<std::ptrdiff_t>
+        (
+            get_field<uint32>( TIFFTAG_TILEWIDTH  ),
+            get_field<uint32>( TIFFTAG_TILELENGTH )
+        );
+    }
 
     class sequential_row_access_state
         :
