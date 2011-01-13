@@ -394,7 +394,7 @@ private:
         (
             /*std*/::write
             (
-                reinterpret_cast<int>( compressor().client_data ),
+                reinterpret_cast<long>( compressor().client_data ),
                 write_buffer_.begin(),
                 number_of_bytes
             ) != static_cast<int>( number_of_bytes )
@@ -446,7 +446,7 @@ private:
     static void BF_CDECL term_and_close_fd_destination( j_compress_ptr const p_cinfo )
     {
         term_fd_destination( p_cinfo );
-        BOOST_VERIFY( /*std*/::close( reinterpret_cast<int>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
+        BOOST_VERIFY( /*std*/::close( reinterpret_cast<long>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
     }
 
 private:

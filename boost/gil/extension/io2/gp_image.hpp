@@ -540,6 +540,7 @@ private: // Private formatted_image_base interface.
 
         point2<std::ptrdiff_t> const & targetDimensions( original_view( view ).dimensions() );
         gp_roi const roi( get_offset<gp_roi::offset_t>( view ), targetDimensions.x, targetDimensions.y );
+        format_t const my_format( gil_to_gp_format<typename View::value_type, is_planar<View>::value>::value );
         BitmapData bitmapData;
         ensure_result
         (
@@ -548,11 +549,11 @@ private: // Private formatted_image_base interface.
                 pBitmap_,
                 &roi,
                 ImageLockModeRead,
-                view_gp_format::apply<MyView>::value,
+                my_format,
                 &bitmapData
             )
         );
-        BOOST_ASSERT( bitmapData.PixelFormat == view_gp_format::apply<MyView>::value );
+        BOOST_ASSERT( bitmapData.PixelFormat == my_format );
         copy_and_convert_pixels // This must not throw!
         (
             interleaved_view
