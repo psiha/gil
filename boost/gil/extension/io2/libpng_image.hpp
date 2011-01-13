@@ -280,7 +280,7 @@ public:
         write( view );
     }
 
-    void write( libpng_view_data_t const & view ) throw(...)
+    void write( libpng_view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
@@ -534,10 +534,15 @@ public: // Low-level (row, strip, tile) access
     png_struct & lib_object() const { return png_object(); }
 
 private: // Private formatted_image_base interface.
-    friend class base_t;
+    // Implementation note:
+    //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
+    // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
+    // neither.
+    //                                        (13.01.2011.) (Domagoj Saric)
+    friend class detail::formatted_image<libpng_image>;
 
     template <class MyView, class TargetView, class Converter>
-    void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const throw(...)
+    void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         using namespace detail;
 
@@ -632,7 +637,7 @@ private: // Private formatted_image_base interface.
         raw_copy_to_prepared_view( view_data );
     }
 
-    void raw_copy_to_prepared_view( detail::libpng_view_data_t const view_data ) const throw(...)
+    void raw_copy_to_prepared_view( detail::libpng_view_data_t const view_data ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
             if ( setjmp( error_handler_target() ) )
@@ -668,7 +673,7 @@ private:
         detail::throw_libpng_error();
     }
 
-    void init() throw(...)
+    void init() BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
             try

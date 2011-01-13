@@ -682,7 +682,12 @@ private:
     }
 
 private: // Private formatted_image_base interface.
-    friend class base_t;
+    // Implementation note:
+    //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
+    // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
+    // neither.
+    //                                        (13.01.2011.) (Domagoj Saric)
+    friend class detail::formatted_image<libtiff_image>;
 
     struct tile_setup_t
         #ifndef __GNUC__

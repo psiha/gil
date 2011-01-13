@@ -14,8 +14,8 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef libjpeg_private_base_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
-#define libjpeg_private_base_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
+#ifndef libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
+#define libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
 #include "detail/io_error.hpp"
@@ -34,6 +34,13 @@
     #include <csetjmp>
 #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 #include <cstdlib>
+#ifdef _MSC_VER
+    #ifndef _POSIX_
+        #define _POSIX_
+    #endif
+    #include "io.h"
+#endif // _MSC_VER
+#include "fcntl.h"
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -92,7 +99,7 @@ protected:
     struct for_compressor   {};
 
 protected:
-    libjpeg_base( for_decompressor ) throw ( ... )
+    libjpeg_base( for_decompressor ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         initialize_error_handler();
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
@@ -102,7 +109,7 @@ protected:
         jpeg_create_decompress( &decompressor() );
     }
 
-    libjpeg_base( for_compressor ) throw ( ... )
+    libjpeg_base( for_compressor ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         initialize_error_handler();
         #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
@@ -262,7 +269,7 @@ public:
     jpeg_compress_struct       & lib_object()       { return compressor(); }
     jpeg_compress_struct const & lib_object() const { return const_cast<libjpeg_writer &>( *this ).lib_object(); }
 
-    void write_default( view_data_t const & view ) throw(...)
+    void write_default( view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         setup_compression( view );
 
@@ -291,7 +298,7 @@ private:
         compressor().in_color_space   = view.format_;
     }
 
-    void do_write( view_data_t const & view ) throw(...)
+    void do_write( view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
@@ -338,21 +345,27 @@ private:
 
         compressor().client_data = &file;
 
-        destination_manager_.init_destination    = &init_FILE_destination;
+        destination_manager_.init_destination    = &init_destination     ;
         destination_manager_.empty_output_buffer = &empty_FILE_buffer    ;
         destination_manager_.term_destination    = &term_FILE_destination;
     }
 
     void setup_destination( char const * const p_file_name )
     {
-        FILE * const p_file( /*std*/::fopen( p_file_name, "wb" ) );
-        if ( !p_file )
+        int const file_descriptor( /*std*/::open( p_file_name, BF_MSVC_SPECIFIC( O_BINARY | ) O_CREAT | O_WRONLY, S_IREAD | S_IWRITE ) );
+        if ( file_descriptor < 0 )
             throw_jpeg_error();
-        setup_destination( *p_file );
-        destination_manager_.term_destination = &term_and_close_FILE_destination;
+
+        setup_destination();
+
+        compressor().client_data = reinterpret_cast<void *>( file_descriptor );
+
+        destination_manager_.init_destination    = &init_destination             ;
+        destination_manager_.empty_output_buffer = &empty_fd_buffer              ;
+        destination_manager_.term_destination    = &term_and_close_fd_destination;
     }
 
-    static void BF_CDECL init_FILE_destination( j_compress_ptr const p_cinfo )
+    static void BF_CDECL init_destination( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( get_writer( p_cinfo ) );
 
@@ -374,12 +387,34 @@ private:
         )
             fatal_error_handler( &common() );
     }
+
+    void write_fd_bytes( std::size_t const number_of_bytes )
+    {
+        if
+        (
+            /*std*/::write
+            (
+                reinterpret_cast<int>( compressor().client_data ),
+                write_buffer_.begin(),
+                number_of_bytes
+            ) != number_of_bytes
+        )
+            fatal_error_handler( &common() );
+    }
     
     static boolean BF_CDECL empty_FILE_buffer( j_compress_ptr const p_cinfo )
     {
         libjpeg_writer & writer( get_writer( p_cinfo ) );
         writer.write_FILE_bytes( writer.write_buffer_.size() );
-        init_FILE_destination( p_cinfo );
+        init_destination( p_cinfo );
+        return true;
+    }
+
+    static boolean BF_CDECL empty_fd_buffer( j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( get_writer( p_cinfo ) );
+        writer.write_fd_bytes( writer.write_buffer_.size() );
+        init_destination( p_cinfo );
         return true;
     }
 
@@ -392,6 +427,15 @@ private:
         writer.write_FILE_bytes( remaining_bytes );
     }
 
+    static void BF_CDECL term_fd_destination( j_compress_ptr const p_cinfo )
+    {
+        libjpeg_writer & writer( get_writer( p_cinfo ) );
+
+        std::size_t const remaining_bytes( writer.write_buffer_.size() - writer.destination_manager_.free_in_buffer );
+
+        writer.write_fd_bytes( remaining_bytes );
+    }
+
     // Ensure that jpeg_finish_compress() is called so that this gets called...
     static void BF_CDECL term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
     {
@@ -399,9 +443,15 @@ private:
         BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
     }
 
+    static void BF_CDECL term_and_close_fd_destination( j_compress_ptr const p_cinfo )
+    {
+        term_fd_destination( p_cinfo );
+        BOOST_VERIFY( /*std*/::close( reinterpret_cast<int>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
+    }
+
 private:
-    jpeg_destination_mgr       destination_manager_;
-    array<unsigned char, 4096> write_buffer_       ;
+    jpeg_destination_mgr        destination_manager_;
+    array<unsigned char, 65536> write_buffer_       ;
 };
 //------------------------------------------------------------------------------
 } // namespace detail
@@ -563,9 +613,14 @@ public: /// \ingroup Construction
     }
 
 private: // Private interface for the base formatted_image<> class.
-    friend class base_t;
+    // Implementation note:
+    //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
+    // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
+    // neither.
+    //                                        (13.01.2011.) (Domagoj Saric)
+    friend class detail::formatted_image<libjpeg_image>;
 
-    void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const throw(...)
+    void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         setup_decompression( view_data );
 
@@ -687,7 +742,7 @@ private: // Private interface for the base formatted_image<> class.
     }
 
 private:
-    void setup_decompression( detail::decompression_setup_data_t const & view_data ) const throw(...)
+    void setup_decompression( detail::decompression_setup_data_t const & view_data ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
     {
         unsigned int const state       ( decompressor().global_state );
         unsigned int       rows_to_skip( view_data.offset_           );
@@ -963,8 +1018,8 @@ private:
 
 private:
     jpeg_source_mgr     source_manager_         ;
-    array<JOCTET, 4096> read_buffer_            ;//...zzz...extract to a wrapper...not needed for in memory sources...
     mutable bool        dirty_output_dimensions_;
+    array<JOCTET, 4096> read_buffer_            ;//...zzz...extract to a wrapper...not needed for in memory sources...
 };
 
 #if defined(BOOST_MSVC)
@@ -1029,4 +1084,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // libjpeg_private_base_hpp
+#endif // libjpeg_image_hpp
