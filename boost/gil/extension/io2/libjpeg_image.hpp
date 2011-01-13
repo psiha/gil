@@ -34,12 +34,12 @@
     #include <csetjmp>
 #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 #include <cstdlib>
-#ifdef _MSC_VER
-    #ifndef _POSIX_
-        #define _POSIX_
-    #endif
+#if defined(BOOST_MSVC)
+    #pragma warning( push )
+    #pragma warning( disable : 4996 ) // "The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name."
     #include "io.h"
-#endif // _MSC_VER
+    #include "sys/stat.h"
+#endif // MSVC
 #include "fcntl.h"
 //------------------------------------------------------------------------------
 namespace boost
@@ -397,7 +397,7 @@ private:
                 reinterpret_cast<int>( compressor().client_data ),
                 write_buffer_.begin(),
                 number_of_bytes
-            ) != number_of_bytes
+            ) != static_cast<int>( number_of_bytes )
         )
             fatal_error_handler( &common() );
     }
@@ -1084,4 +1084,9 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
+
+#if defined(BOOST_MSVC)
+    #pragma warning( pop )
+#endif // MSVC
+
 #endif // libjpeg_image_hpp

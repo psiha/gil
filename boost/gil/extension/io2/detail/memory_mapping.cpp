@@ -23,7 +23,7 @@
     #endif // WIN32_LEAN_AND_MEAN
     #include "windows.h"
 
-    //#define _POSIX_
+    #pragma warning ( disable : 4996 ) // "The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name."
     #include "io.h"
 #else
     #include <sys/mman.h>      // mmap, munmap.
