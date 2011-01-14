@@ -906,22 +906,46 @@ public: // Utility 'quick-wrappers'...
         reader_t( target ).copy_to_image( image, synchronize_dimensions(), synchronize_formats() );
     }
 
+    template <typename char_type, class View>
+    static void read( std::basic_string<char_type> const & file_name, View const & view )
+    {
+        read( file_name.c_str(), view );
+    }
+
+    template <typename char_type, class View>
+    static void read( std::basic_string<char_type>       & file_name, View const & view )
+    {
+        read( file_name.c_str(), view );
+    }
+
     template <class Target, class View>
     static void write( Target & target, View const & view )
     {
-        // decay array to const pointer
-        //...zzz...to add automatic support for char */char[] targets...clean this up...
-        typedef typename decay<Target>::type decayed_target_t;
-        typedef typename mpl::if_
-        <
-            is_pointer<decayed_target_t>,
-            typename remove_pointer<decayed_target_t>::type const *,
-            decayed_target_t
-        >::type target_t;
-        typedef typename writer_for<target_t>::type writer_t;
+        typedef typename writer_for<Target>::type writer_t;
         // The backend does not know how to write to the specified target type.
         BOOST_STATIC_ASSERT(( !is_same<writer_t, mpl::void_>::value ));
         writer_t( target, view ).write_default();
+    }
+
+    template <class Target, class View>
+    static void write( Target * p_target, View const & view )
+    {
+        typedef typename writer_for<Target const *>::type writer_t;
+        // The backend does not know how to write to the specified target type.
+        BOOST_STATIC_ASSERT(( !is_same<writer_t, mpl::void_>::value ));
+        writer_t( p_target, view ).write_default();
+    }
+
+    template <typename char_type, class View>
+    static void write( std::basic_string<char_type> const & file_name, View const & view )
+    {
+        write( file_name.c_str(), view );
+    }
+
+    template <typename char_type, class View>
+    static void write( std::basic_string<char_type>       & file_name, View const & view )
+    {
+        write( file_name.c_str(), view );
     }
 
 private:
