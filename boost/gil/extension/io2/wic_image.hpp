@@ -144,8 +144,8 @@ struct wic_view_data_t
     template <typename View>
     wic_view_data_t( View const & view )
         :
-        p_roi_ ( 0                                                                                ),
-        format_( view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value )
+        p_roi_ ( 0                                                                           ),
+        format_( gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value )
     {
         set_bitmapdata_for_view( view );
     }
@@ -153,8 +153,8 @@ struct wic_view_data_t
     template <typename View>
     wic_view_data_t( View const & view, wic_roi::offset_t const & offset )
         :
-        p_roi_ ( static_cast<wic_roi const *>( optional_roi_.address() )                          ),
-        format_( view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value )
+        p_roi_ ( static_cast<wic_roi const *>( optional_roi_.address() )                     ),
+        format_( gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value )
     {
         set_bitmapdata_for_view( view );
         new ( optional_roi_.address() ) wic_roi( offset, width_, height_ );
@@ -176,7 +176,7 @@ private:
         height_     = view.height();
         stride_     = view.pixels().row_size();
         pixel_size_ = memunit_step( typename View::x_iterator() );
-        //format_     = view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value;
+        //format_     = gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value;
         p_buffer_   = detail::formatted_image_base::get_raw_data( view );
     }
 
@@ -398,7 +398,7 @@ public:
     //            view.width(),
     //            view.height(),
     //            view.pixels().row_size(),
-    //            view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value,
+    //            gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value,
     //            get_raw_data( view ),
     //            &pBitmap_
     //        )
@@ -503,7 +503,7 @@ private: // Private formatted_image_base interface.
         #ifndef NDEBUG
             WICPixelFormatGUID locked_format;
             verify_result( p_bitmap_lock->GetPixelFormat( &locked_format ) );
-            BOOST_ASSERT( locked_format == view_wic_format::apply<typename View::value_type, is_planar<View>::value>::value );
+            BOOST_ASSERT(( locked_format == gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value ));
         #endif
         copy_and_convert_pixels
         (
