@@ -909,7 +909,16 @@ public: // Utility 'quick-wrappers'...
     template <class Target, class View>
     static void write( Target & target, View const & view )
     {
-        typedef typename writer_for<typename decay<Target>::type>::type writer_t;
+        // decay array to const pointer
+        //...zzz...to add automatic support for char */char[] targets...clean this up...
+        typedef typename decay<Target>::type decayed_target_t;
+        typedef typename mpl::if_
+        <
+            is_pointer<decayed_target_t>,
+            typename remove_pointer<decayed_target_t>::type const *,
+            decayed_target_t
+        >::type target_t;
+        typedef typename writer_for<target_t>::type writer_t;
         // The backend does not know how to write to the specified target type.
         BOOST_STATIC_ASSERT(( !is_same<writer_t, mpl::void_>::value ));
         writer_t( target, view ).write_default();
