@@ -119,7 +119,7 @@ native_handle_guard create_file( char const * const file_name, file_flags const 
 #else
 
     mode_t const current_mask( ::umask( 0 ) );
-    int const file_handle( ::open( file_name, flags.oflag, flags.pmode ) );
+    int    const file_handle ( ::open( file_name, flags.oflag, flags.pmode ) );
     BOOST_VERIFY( ::umask( current_mask ) == 0 );
 
 #endif // _WIN32
@@ -187,11 +187,11 @@ unsigned int const file_flags::on_construction_rights::execute = BOOST_AUX_IO_WI
 
 file_flags file_flags::create
 (
-    unsigned int const handle_access_flags   ,
-    unsigned int const share_mode            ,
-    open_policy  const open_flags            ,
-    unsigned int const system_hints          ,
-    unsigned int const on_construction_rights
+    unsigned int  const handle_access_flags   ,
+    unsigned int  const share_mode            ,
+    open_policy_t const open_flags            ,
+    unsigned int  const system_hints          ,
+    unsigned int  const on_construction_rights
 )
 {
     file_flags const flags =

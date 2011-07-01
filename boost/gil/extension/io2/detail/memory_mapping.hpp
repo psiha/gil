@@ -60,14 +60,18 @@ struct file_flags
         static unsigned int const remove;
     };
 
-    enum open_policy
+    struct open_policy
     {
-        create_new                      = BOOST_AUX_IO_WIN32_OR_POSIX( 1, O_CREAT | O_EXCL  ),
-        create_new_or_truncate_existing = BOOST_AUX_IO_WIN32_OR_POSIX( 2, O_CREAT | O_TRUNC ),
-        open_existing                   = BOOST_AUX_IO_WIN32_OR_POSIX( 3, 0                 ),
-        open_or_create                  = BOOST_AUX_IO_WIN32_OR_POSIX( 4, O_CREAT           ),
-        open_and_truncate_existing      = BOOST_AUX_IO_WIN32_OR_POSIX( 5, O_TRUNC           )
+        enum value_type
+        {
+            create_new                      = BOOST_AUX_IO_WIN32_OR_POSIX( 1, O_CREAT | O_EXCL  ),
+            create_new_or_truncate_existing = BOOST_AUX_IO_WIN32_OR_POSIX( 2, O_CREAT | O_TRUNC ),
+            open_existing                   = BOOST_AUX_IO_WIN32_OR_POSIX( 3, 0                 ),
+            open_or_create                  = BOOST_AUX_IO_WIN32_OR_POSIX( 4, O_CREAT           ),
+            open_and_truncate_existing      = BOOST_AUX_IO_WIN32_OR_POSIX( 5, O_TRUNC           )
+        };
     };
+    typedef open_policy::value_type open_policy_t;
 
     struct system_hints
     {
@@ -89,7 +93,7 @@ struct file_flags
     (
         unsigned int handle_access_flags   ,
         unsigned int share_mode            ,
-        open_policy                        ,
+        open_policy_t                      ,
         unsigned int system_hints          ,
         unsigned int on_construction_rights
     );
