@@ -19,9 +19,10 @@
 //------------------------------------------------------------------------------
 #include "formatted_image.hpp"
 
-#include "detail/platform_specifics.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
+#include "detail/platform_specifics.hpp"
+#include "detail/shared.hpp"
 
 #if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
     #error libtiff support requires mpl vectors of size 35 or greater...
