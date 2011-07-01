@@ -64,6 +64,12 @@ public:
     com_scoped_ptr( com_scoped_ptr const & source ) : baseCOMPtr_( source.baseCOMPtr_ ) { if ( baseCOMPtr_ ) baseCOMPtr_->AddRef(); }
     com_scoped_ptr( IUnknown & source )
     {
+        //http://msdn.microsoft.com/en-us/library/ms682521(v=vs.85).aspx
+        //http://blogs.msdn.com/b/oldnewthing/archive/2004/03/26/96777.aspx
+        //http://c2.com/cgi/wiki?QueryInterface
+        //http://msdn.microsoft.com/en-us/library/ms810016
+        //http://msdn.microsoft.com/en-us/library/dd542643(VS.85).aspx
+        //http://en.wikipedia.org/wiki/Catastrophic_failure
         BOOST_VERIFY
         (
             source.QueryInterface
