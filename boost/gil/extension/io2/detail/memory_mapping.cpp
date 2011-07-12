@@ -3,7 +3,7 @@
 /// \file memory_mapping.cpp
 /// ------------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) Domagoj Saric 2010.-2011.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -100,8 +100,11 @@ posix_handle::handle_t const & posix_handle::handle() const
     return handle_;
 }
 
+//------------------------------------------------------------------------------
+} // guard
 
-native_handle_guard create_file( char const * const file_name, file_flags const & flags )
+
+guard::native_handle create_file( char const * const file_name, file_flags const & flags )
 {
     BOOST_ASSERT( file_name );
 
@@ -124,11 +127,8 @@ native_handle_guard create_file( char const * const file_name, file_flags const 
 
 #endif // _WIN32
 
-    return native_handle_guard( file_handle );
+    return guard::native_handle( file_handle );
 }
-
-//------------------------------------------------------------------------------
-} // guard
 
 
 bool set_file_size( guard::native_handle_t const file_handle, unsigned int const desired_size )
@@ -201,20 +201,20 @@ file_flags file_flags::create
         share_mode, // share_mode
         open_flags, // creation_disposition
         system_hints
-            ||
+            |
         (
             ( on_construction_rights & FILE_ATTRIBUTE_NORMAL )
                 ? ( on_construction_rights & ~FILE_ATTRIBUTE_READONLY )
                 :   on_construction_rights
         ) // flags_and_attributes
-    #else
+    #else // POSIX
         ( ( handle_access_flags == O_RDONLY | O_WRONLY ) ? O_RDWR : handle_access_flags )
-            ||
+            |
         open_flags
-            ||
-        system_hints,
-        on_construction_rights
-    #endif // _WIN32
+            |
+        system_hints, // oflag
+        on_construction_rights // pmode
+    #endif // OS impl
     };
 
     return flags;
@@ -223,7 +223,16 @@ file_flags file_flags::create
 
 file_flags file_flags::create_for_opening_existing_files( unsigned int const handle_access_flags, unsigned int const share_mode , bool const truncate, unsigned int const system_hints )
 {
-    return create( handle_access_flags, share_mode, truncate ? open_and_truncate_existing : open_existing, system_hints, 0 );
+    return create
+    (
+        handle_access_flags,
+        share_mode,
+        truncate
+            ? open_policy::open_and_truncate_existing
+            : open_policy::open_existing,
+        system_hints,
+        0
+    );
 }
 
 
@@ -278,13 +287,17 @@ mapping_flags mapping_flags::create
 }
 
 
-memory_mapping::memory_mapping
+template <>
+mapped_view<unsigned char> mapped_view<unsigned char>::map
 (
     guard::native_handle_t const   object_handle,
     mapping_flags          const & flags,
-    std::size_t            const   desired_size
+    std::size_t            const   desired_size,
+    std::size_t            const   offset
 )
 {
+    typedef mapped_view<unsigned char>::iterator iterator_t;
+
 #ifdef _WIN32
 
     // Implementation note:
@@ -293,78 +306,82 @@ memory_mapping::memory_mapping
     // http://msdn.microsoft.com/en-us/library/aa366537(VS.85).aspx
     //                                        (26.03.2010.) (Domagoj Saric)
 
+    ULARGE_INTEGER large_integer;
+
     // CreateFileMapping accepts INVALID_HANDLE_VALUE as valid input but only if
     // the size parameter is not null.
+    large_integer.QuadPart = desired_size;
     guard::windows_handle const mapping
     (
-        ::CreateFileMapping( object_handle, 0, flags.create_mapping_flags, 0, desired_size, 0 )
+        ::CreateFileMapping( object_handle, 0, flags.create_mapping_flags, large_integer.HighPart, large_integer.LowPart, 0 )
     );
     BOOST_ASSERT
     (
         !mapping.handle() || ( object_handle == INVALID_HANDLE_VALUE ) || ( desired_size != 0 )
     );
 
-    BOOST_ASSERT( this->empty() );
-
-    iterator const view_start( static_cast<iterator>( ::MapViewOfFile( mapping.handle(), flags.map_view_flags, 0, 0, desired_size ) ) );
-    iterator const view_end
+    large_integer.QuadPart = offset;
+    iterator_t const view_start( static_cast<iterator_t>( ::MapViewOfFile( mapping.handle(), flags.map_view_flags, large_integer.HighPart, large_integer.LowPart, desired_size ) ) );
+    return mapped_view<unsigned char>
     (
+        view_start,
         ( view_start && ( object_handle != INVALID_HANDLE_VALUE ) )
             ? view_start + desired_size
             : view_start
     );
 
-#else
+#else // POSIX
 
-    iterator const view_start( desired_size ? static_cast<iterator>( ::mmap( 0, desired_size, flags.protection, flags.flags, file_handle, 0 ) ) : 0 );
-    iterator const view_end
+    iterator_t const view_start( static_cast<iterator_t>( ::mmap( 0, desired_size, flags.protection, flags.flags, file_handle, 0 ) ) );
+    return mapped_view<unsigned char>
     (
+        view_start,
         ( view_start != MAP_FAILED )
             ? view_start + desired_size
             : view_start
     );
 
-#endif // _WIN32
-
-    /// \todo Convert these constructors to factory functions to avoid the
-    /// anti-pattern of a fallible-yet-nonthrowing constructor.
-    ///                                       (10.10.2010.) (Domagoj Saric)
-    iterator_range::operator = ( iterator_range( view_start, view_end ) );
+#endif // OS API
 }
 
-
-memory_mapping::~memory_mapping()
+template <>
+void detail::mapped_view_base<unsigned char const>::unmap( detail::mapped_view_base<unsigned char const> const & mapped_range )
 {
 #ifdef _WIN32
-    BOOST_VERIFY( ::UnmapViewOfFile( begin()         ) || this->empty() );
+    BOOST_VERIFY( ::UnmapViewOfFile( mapped_range.begin()                      ) || mapped_range.empty() );
 #else
-    BOOST_VERIFY( ( ::munmap( begin(), size() ) == 0 ) || this->empty() );
+    BOOST_VERIFY( ( ::munmap( mapped_range.begin(), mapped_range.size() ) == 0 ) || mapped_range.empty() );
 #endif // _WIN32
 }
 
-
-memory_mapped_source::memory_mapped_source( guard::native_handle_t const object_handle, unsigned int const desiredSize )
-    :
-    memory_mapping
+template <>
+mapped_view<unsigned char const> mapped_view<unsigned char const>::map
+(
+    guard::native_handle_t const object_handle,
+    std::size_t            const desired_size,
+    std::size_t            const offset,
+    bool                   const map_for_code_execution,
+    unsigned int           const mapping_system_hints
+)
+{
+    return mapped_view<unsigned char>::map
     (
         object_handle,
         mapping_flags::create
         (
-            mapping_flags::handle_access_rights::read,
-            mapping_flags::share_mode          ::shared,
-            mapping_flags::system_hint         ::uninitialized
+            mapping_flags::handle_access_rights::read | ( map_for_code_execution ? mapping_flags::handle_access_rights::execute : 0 ),
+            mapping_flags::share_mode::shared,
+            mapping_system_hints
         ),
-        desiredSize
-    )
-{
+        desired_size,
+        offset
+    );
 }
 
 
-memory_mapped_source map_read_only_file( char const * const file_name )
+mapped_view<unsigned char const> map_read_only_file( char const * const file_name )
 {
-    using namespace guard;
-
-    native_handle_guard const file_handle
+    guard::native_handle const file_handle
     (
         create_file
         (
@@ -372,14 +389,22 @@ memory_mapped_source map_read_only_file( char const * const file_name )
             file_flags::create_for_opening_existing_files
             (
                 file_flags::handle_access_rights::read,
-                file_flags::share_mode          ::read,
+                file_flags::share_mode          ::read | file_flags::share_mode::write,
                 false,
                 file_flags::system_hints        ::sequential_access
             )
         )
     );
 
-    return memory_mapped_source( file_handle.handle(), get_file_size( file_handle.handle() ) );
+    return mapped_view<unsigned char const>::map
+    (
+        file_handle.handle(),
+        #ifdef _WIN32
+            0 // Windows APIs interpret zero as 'whole file'
+        #else // POSIX
+            get_file_size( file_handle.handle() )
+        #endif // OS impl
+    );
 }
 
 
