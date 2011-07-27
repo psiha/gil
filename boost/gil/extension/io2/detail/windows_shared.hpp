@@ -31,6 +31,9 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
+namespace io
+{
+//------------------------------------------------------------------------------
 namespace detail
 {
 //------------------------------------------------------------------------------
@@ -53,183 +56,35 @@ namespace detail
 class wide_path
 {
 public:
-    explicit wide_path( char const * const pFilename )
+    explicit wide_path( char const * const p_file_name )
     {
-        BOOST_ASSERT( pFilename );
-        BOOST_ASSERT( std::strlen( pFilename ) < wideFileName_.size() );
-        char    const * pSource     ( pFilename             );
-        wchar_t       * pDestination( wideFileName_.begin() );
+        BOOST_ASSERT( p_file_name );
+        BOOST_ASSERT( std::strlen( p_file_name ) < wide_file_name_.size() );
+        char    const * pSource     ( p_file_name             );
+        wchar_t       * pDestination( wide_file_name_.begin() );
         do
         {
             *pDestination++ = *pSource;
         } while ( *pSource++ );
-        BOOST_ASSERT( pDestination < wideFileName_.end() );
+        BOOST_ASSERT( pDestination < wide_file_name_.end() );
     }
 
-    operator wchar_t const * () const { return wideFileName_.begin(); }
+    operator wchar_t const * () const { return wide_file_name_.begin(); }
 
 private:
-    boost::array<wchar_t, MAX_PATH> wideFileName_;
+    boost::array<wchar_t, MAX_PATH> wide_file_name_;
 };
 
 
 #pragma warning( push )
 #pragma warning( disable : 4355 ) // 'this' used in base member initializer list.
 
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class input_FILE_for_IStream_extender
-/// \internal
-/// \brief Helper wrapper for classes that can construct from IStream objects.
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class IStream_capable_class>
-class __declspec( novtable ) input_FILE_for_IStream_extender
-    :
-    private FileReadStream,
-    public  IStream_capable_class
-{
-public:
-    input_FILE_for_IStream_extender( FILE & file )
-        :
-        FileReadStream       ( file                            ),
-        IStream_capable_class( static_cast<IStream &>( *this ) )
-    {}
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class output_FILE_for_IStream_extender
-/// \internal
-/// \brief Helper wrapper for classes that can construct from IStream objects.
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class IStream_capable_class>
-class __declspec( novtable ) output_FILE_for_IStream_extender
-    :
-    private FileWriteStream,
-    public  IStream_capable_class
-{
-public:
-    output_FILE_for_IStream_extender( FILE & file )
-        :
-        FileWriteStream      ( file                            ),
-        IStream_capable_class( static_cast<IStream &>( *this ) )
-    {}
-
-    template <typename A2> //...zzz...
-    output_FILE_for_IStream_extender( FILE & file, A2 const & a2 )
-        :
-        FileWriteStream      ( file                                ),
-        IStream_capable_class( static_cast<IStream &>( *this ), a2 )
-    {}
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class output_file_name_for_IStream_extender
-/// \internal
-/// \brief Helper wrapper for classes that can construct from IStream objects.
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class IStream_capable_class>
-class __declspec( novtable ) output_file_name_for_IStream_extender
-    :
-    private FileHandleWriteStream,
-    public  IStream_capable_class
-{
-public:
-    output_file_name_for_IStream_extender( wchar_t const * const file_name )
-        :
-        FileHandleWriteStream( do_open( file_name )            ),
-        IStream_capable_class( static_cast<IStream &>( *this ) )
-    {}
-
-    template <typename A2> //...zzz...
-    output_file_name_for_IStream_extender( wchar_t const * const file_name, A2 const & a2 )
-        :
-        FileHandleWriteStream( do_open( file_name )                ),
-        IStream_capable_class( static_cast<IStream &>( *this ), a2 )
-    {}
-
-    ~output_file_name_for_IStream_extender() { BOOST_VERIFY( ::CloseHandle( file_ ) ); }
-
-private:
-    static HANDLE do_open( wchar_t const * const file_name )
-    {
-        HANDLE const handle
-        (
-            ::CreateFileW
-            (
-                file_name,
-                GENERIC_WRITE,
-                0,
-                0,
-                OPEN_ALWAYS,
-                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-                NULL
-            )
-        );
-        io_error_if_not( handle, "File open failure" );
-        return handle;
-    }
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class memory_chunk_for_IStream_extender
-/// \internal
-/// \brief Helper wrapper for classes that can construct from IStream objects.
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class IStream_capable_class>
-class __declspec( novtable ) memory_chunk_for_IStream_extender
-    :
-    private MemoryReadStream,
-    public  IStream_capable_class
-{
-public:
-    memory_chunk_for_IStream_extender( memory_chunk_t const & in_memory_image )
-        :
-        MemoryReadStream     ( in_memory_image                 ),
-        IStream_capable_class( static_cast<IStream &>( *this ) )
-    {}
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class writable_memory_chunk_for_IStream_extender
-/// \internal
-/// \brief Helper wrapper for classes that can construct from IStream objects.
-///
-////////////////////////////////////////////////////////////////////////////////
-
-template <class IStream_capable_class>
-class __declspec( novtable ) writable_memory_chunk_for_IStream_extender
-    :
-    private MemoryWriteStream,
-    public  IStream_capable_class
-{
-public:
-    writable_memory_chunk_for_IStream_extender( writable_memory_chunk_t const & in_memory_image )
-        :
-        MemoryWriteStream     ( in_memory_image                ),
-        IStream_capable_class( static_cast<IStream &>( *this ) )
-    {}
-};
-
 #pragma warning( pop )
 
 //------------------------------------------------------------------------------
 } // namespace detail
+//------------------------------------------------------------------------------
+} // namespace io
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

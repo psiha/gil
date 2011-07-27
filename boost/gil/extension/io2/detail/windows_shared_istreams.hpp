@@ -3,9 +3,9 @@
 /// \file windows_shared_istreams.hpp
 /// ---------------------------------
 ///
-/// Helper IStream implementations for in-memory and FILE base IO.
+/// Windows IStream implementation(s) for the GIL.IO2 device concept.
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) Domagoj Saric 2010.-2011.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -15,29 +15,31 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#pragma once
 #ifndef windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
 #define windows_shared_istreams_hpp__A8D022F0_BBFA_4496_8252_8FD1F6A28DF7
+#pragma once
 //------------------------------------------------------------------------------
 #include "platform_specifics.hpp"
+#include "boost/gil/extension/io2/devices/device.hpp"
 
 #include "boost/gil/utilities.hpp"
 
 #include "boost/range/iterator_range.hpp"
 
+#ifndef COM_NO_WINDOWS_H
+    #define COM_NO_WINDOWS_H
+#endif // COM_NO_WINDOWS_H
 #include "objbase.h"
 #include "objidl.h"
 #include "unknwn.h"
 //------------------------------------------------------------------------------
 namespace boost
 {
-
-//...zzz...duplicated from memory_mapping.hpp...clean this up...
-typedef iterator_range<unsigned char const *> memory_chunk_t;
-typedef iterator_range<unsigned char       *> writable_memory_chunk_t;
-
 //------------------------------------------------------------------------------
 namespace gil
+{
+//------------------------------------------------------------------------------
+namespace io
 {
 //------------------------------------------------------------------------------
 namespace detail
@@ -48,7 +50,6 @@ namespace detail
 #pragma warning( disable: 4373 )  // previous versions of the compiler did not override when parameters only differed by const/volatile qualifiers
 #pragma warning( disable: 4481 )  // nonstandard extension used: override specifier 'override'
 
-
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// \class StreamBase
@@ -58,16 +59,19 @@ namespace detail
 
 class __declspec( novtable ) StreamBase : public IStream, noncopyable
 {
+public:
+    static void * operator new( std::size_t, void * const p_placeholder ) { return p_placeholder; }
+
 #ifndef NDEBUG
 protected:
-    StreamBase() : ref_cnt_( 1 ) {}
-    ~StreamBase() { assert( ref_cnt_ == 1 ); }
+     StreamBase() : ref_cnt_( 1 ) {}
+    ~StreamBase() { BOOST_ASSERT( ref_cnt_ == 1 ); }
 #endif // NDEBUG
 
 protected:
     static HRESULT not_implemented()
     {
-        assert( !"Should not get called!" );
+        BOOST_ASSERT( !"Should not get called!" );
         return E_NOTIMPL;
     }
 
@@ -88,9 +92,9 @@ private: // Not implemented or 'possibly' implemented by derived classes.
 private:
     HRESULT STDMETHODCALLTYPE Stat( STATSTG * const pstatstg, DWORD const grfStatFlag ) override
     {
-        assert( pstatstg );
+        BOOST_ASSERT( pstatstg );
 
-        assert( grfStatFlag & STATFLAG_NONAME );
+        BOOST_ASSERT( grfStatFlag & STATFLAG_NONAME );
 
         std::memset( pstatstg, 0, sizeof( *pstatstg ) );
 
@@ -107,11 +111,11 @@ private:
 
         {
             LARGE_INTEGER const seek_position = { 0, 0 };
-            HRESULT hresult = Seek( seek_position, SEEK_END, &pstatstg->cbSize ); assert( hresult == S_OK );
-                    hresult = Seek( seek_position, SEEK_SET, 0                 ); assert( hresult == S_OK );
-            assert( pstatstg->cbSize.QuadPart );
+            HRESULT hresult = Seek( seek_position, SEEK_END, &pstatstg->cbSize ); BOOST_ASSERT( hresult == S_OK );
+                    hresult = Seek( seek_position, SEEK_SET, 0                 ); BOOST_ASSERT( hresult == S_OK );
+            BOOST_ASSERT( pstatstg->cbSize.QuadPart );
         }
-        
+
         //pstatstg->grfMode : http://msdn.microsoft.com/en-us/library/ms891273.aspx
 
         return S_OK;
@@ -152,8 +156,8 @@ private: // Dummy reference counting for stack based objects.
         #endif // NDEBUG
     }
 
-    void * operator new   ( size_t );
-    void   operator delete( void * );
+    static void * operator new   ( std::size_t );
+    //...zzz...because of placement new...static void   operator delete( void *      );
 
 #ifndef NDEBUG
     int ref_cnt_;
@@ -163,67 +167,59 @@ private: // Dummy reference counting for stack based objects.
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class FileStreamBase
-/// ---------------------
+/// \class device_stream_base
+/// -------------------------
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class __declspec( novtable ) FileStreamBase : public StreamBase
+template <class Device>
+class __declspec( novtable ) device_stream_base : public StreamBase
 {
 protected:
-    FileStreamBase( FILE & file ) : file_( file ) {}
+    device_stream_base( typename Device::handle_t const handle ) : handle_( handle ) {}
 
 private:
     HRESULT STDMETHODCALLTYPE Seek( LARGE_INTEGER const dlibMove, DWORD const dwOrigin, ULARGE_INTEGER * const plibNewPosition ) override
     {
-        bool const x64( sizeof( long ) == sizeof( dlibMove.QuadPart ) );
-        assert( x64 || ( dlibMove.HighPart == 0 ) || ( dlibMove.HighPart == -1 ) );
-        long const offset( x64 ? static_cast<long>( dlibMove.QuadPart ) : dlibMove.LowPart );
+        BOOST_STATIC_ASSERT( detail::device_base::beginning        == STREAM_SEEK_SET );
+        BOOST_STATIC_ASSERT( detail::device_base::current_position == STREAM_SEEK_CUR );
+        BOOST_STATIC_ASSERT( detail::device_base::end              == STREAM_SEEK_END );
 
-        BOOST_STATIC_ASSERT( SEEK_SET == STREAM_SEEK_SET );
-        BOOST_STATIC_ASSERT( SEEK_CUR == STREAM_SEEK_CUR );
-        BOOST_STATIC_ASSERT( SEEK_END == STREAM_SEEK_END );
+        BOOST_ASSERT( ( dwOrigin >= STREAM_SEEK_SET ) && ( dwOrigin <= STREAM_SEEK_END ) );
 
-        assert( ( dwOrigin >= SEEK_SET ) && ( dwOrigin <= SEEK_END ) );
+        intmax_t const offset( static_cast<intmax_t>( dlibMove.QuadPart ) );
 
-        int const result
-        (
-            x64
-                ? /*std*/::_fseeki64( &file_, offset, dwOrigin )
-                : /*std*/::fseek    ( &file_, offset, dwOrigin )
-        );
+        bool const success( Device::seek_long( static_cast<detail::device_base::seek_origin>( dwOrigin ), offset, handle_ ) );
+
         if ( plibNewPosition )
-            plibNewPosition->QuadPart =
-                x64
-                    ? /*std*/::_ftelli64( &file_ )
-                    : /*std*/::ftell    ( &file_ );
+            plibNewPosition->QuadPart = Device::position_long( handle_ );
 
-        bool const success( result == 0 );
         return success ? S_OK : S_FALSE;
     }
 
 protected:
-    FILE & file_;
+    typename Device::handle_t const handle_;
 };
 
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class FileReadStream
-/// ---------------------
+/// \class input_device_stream
+/// --------------------------
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class FileReadStream : public FileStreamBase
+template <class DeviceHandle>
+class input_device_stream : public device_stream_base<input_device<DeviceHandle> >
 {
 public:
-    FileReadStream( FILE & file ) : FileStreamBase( file ) {}
+    input_device_stream( DeviceHandle const handle ) : device_stream_base( file ) {}
 
 private:
     HRESULT STDMETHODCALLTYPE Read( void * const pv, ULONG const cb, ULONG * const pcbRead ) override
     {
-        assert( pv );
-        size_t const size_read( /*std*/::fread( pv, 1, cb, &file_ ) );
+        BOOST_ASSERT( pv );
+        std::size_t const size_read( input_device<DeviceHandle>::read( pv, cb, handle_ ) );
         if ( pcbRead )
             *pcbRead = size_read;
         return ( size_read == cb ) ? S_OK : S_FALSE;
@@ -233,223 +229,76 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class FileWriteStream
-/// ----------------------
+/// \class output_device_stream
+/// ---------------------------
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class FileWriteStream : public FileStreamBase
+template <class DeviceHandle>
+class output_device_stream : public device_stream_base<output_device<DeviceHandle> >
 {
 public:
-    FileWriteStream( FILE & file ) : FileStreamBase( file ) {}
+    output_device_stream( DeviceHandle const handle ) : device_stream_base( handle ) {}
 
 private:
     HRESULT STDMETHODCALLTYPE Write( void const * const pv, ULONG const cb, ULONG * const pcbWritten ) override
     {
-        assert( pv );
-        size_t const size_written( /*std*/::fwrite( pv, 1, cb, &file_ ) );
+        BOOST_ASSERT( pv );
+        std::size_t const size_written( output_device<DeviceHandle>::write( pv, cb, handle_ ) );
         if ( pcbWritten )
             *pcbWritten = size_written;
         return ( size_written == cb ) ? S_OK : S_FALSE;
     }
 };
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class FileHandleStreamBase
-/// ---------------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class __declspec( novtable ) FileHandleStreamBase : public StreamBase
-{
-protected:
-    FileHandleStreamBase( HANDLE const file ) : file_( file ) {}
-
-private:
-    HRESULT STDMETHODCALLTYPE Seek( LARGE_INTEGER const dlibMove, DWORD const dwOrigin, ULARGE_INTEGER * const plibNewPosition ) override
-    {
-        BOOST_STATIC_ASSERT( SEEK_SET == STREAM_SEEK_SET );
-        BOOST_STATIC_ASSERT( SEEK_CUR == STREAM_SEEK_CUR );
-        BOOST_STATIC_ASSERT( SEEK_END == STREAM_SEEK_END );
-
-        assert( ( dwOrigin >= SEEK_SET ) && ( dwOrigin <= SEEK_END ) );
-
-        BOOL const success( ::SetFilePointerEx( file_, dlibMove, reinterpret_cast<PLARGE_INTEGER>( plibNewPosition ), dwOrigin ) );
-        return success ? S_OK : S_FALSE;
-    }
-
-protected:
-    HANDLE const file_;
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class FileHandleReadStream
-/// ---------------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class FileHandleReadStream : public FileHandleStreamBase
-{
-public:
-    FileHandleReadStream( HANDLE const file ) : FileHandleStreamBase( file ) {}
-
-private:
-    HRESULT STDMETHODCALLTYPE Read( void * const pv, ULONG const cb, ULONG * const pcbRead ) override
-    {
-        BOOL const success( ::ReadFile( file_, pv, cb, pcbRead, NULL ) );
-        return success ? S_OK : S_FALSE;
-    }
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class FileWriteStream
-/// ----------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class FileHandleWriteStream : public FileHandleStreamBase
-{
-public:
-    FileHandleWriteStream( HANDLE const file ) : FileHandleStreamBase( file ) {}
-
-private:
-    HRESULT STDMETHODCALLTYPE Write( void const * const pv, ULONG const cb, ULONG * const pcbWritten ) override
-    {
-        BOOL const success( ::WriteFile( file_, pv, cb, pcbWritten, NULL ) );
-        return success ? S_OK : S_FALSE;
-    }
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class MemoryStreamBase
-/// -----------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class __declspec( novtable ) MemoryStreamBase : public StreamBase
-{
-protected:
-    MemoryStreamBase( writable_memory_chunk_t const & in_memory_image )
-        :
-        pCurrentPosition_( in_memory_image.begin() ),
-        memory_chunk_    ( in_memory_image         )
-    {
-        assert( in_memory_image );
-    }
-
-#ifndef NDEBUG
-    ~MemoryStreamBase() { assert( pCurrentPosition_ >= memory_chunk_.begin() && pCurrentPosition_ <= memory_chunk_.end() ); }
-#endif // NDEBUG
-
-    std::size_t adjust_size_for_remaining_space( std::size_t const size ) const
-    {
-        return std::min<size_t>( size, memory_chunk_.end() - pCurrentPosition_ );
-    }
-
-private:
-    HRESULT STDMETHODCALLTYPE Seek( LARGE_INTEGER const dlibMove, DWORD const dwOrigin, ULARGE_INTEGER * const plibNewPosition ) override
-    {
-        bool const x64( sizeof( long ) == sizeof( dlibMove.QuadPart ) );
-        assert( x64 || ( dlibMove.HighPart == 0 ) || ( dlibMove.HighPart == -1 ) );
-        long const offset( x64 ? static_cast<long>( dlibMove.QuadPart ) : dlibMove.LowPart );
-
-        unsigned char * const pOrigin( pointer_for_origin( dwOrigin ) );
-        unsigned char * const pTarget( pOrigin + offset );
-        bool const success( pTarget >= memory_chunk_.begin() && pTarget <= memory_chunk_.end() );
-        if ( success )
-            pCurrentPosition_ = pTarget;
-
-        if ( plibNewPosition )
-            plibNewPosition->QuadPart = pCurrentPosition_ - memory_chunk_.begin();
-
-        return success ? S_OK : S_FALSE;
-    }
-
-    unsigned char * pointer_for_origin( DWORD const origin )
-    {
-        switch ( static_cast<STREAM_SEEK>( origin ) )
-        {
-            case STREAM_SEEK_SET: return memory_chunk_.begin();
-            case STREAM_SEEK_CUR: return pCurrentPosition_    ;
-            case STREAM_SEEK_END: return memory_chunk_.end  ();
-            default: BF_UNREACHABLE_CODE
-        }
-    }
-
-protected:
-    unsigned char           *       pCurrentPosition_;
-    writable_memory_chunk_t   const memory_chunk_    ;
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class MemoryReadStream
-/// -----------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class MemoryReadStream : public MemoryStreamBase
-{
-public:
-    MemoryReadStream( memory_chunk_t const & in_memory_image )
-        :
-        MemoryStreamBase( *gil_reinterpret_cast_c<writable_memory_chunk_t const *>( &in_memory_image ) ) {}
-
-private:
-    HRESULT STDMETHODCALLTYPE Read( void * const pv, ULONG const cb, ULONG * const pcbRead ) override
-    {
-        assert( pv );
-        size_t const size_read( adjust_size_for_remaining_space( cb ) );
-        std::memcpy( pv, pCurrentPosition_, size_read );
-        pCurrentPosition_ += size_read;
-        if ( pcbRead )
-            *pcbRead = size_read;
-        return ( size_read == cb ) ? S_OK : S_FALSE;
-    }
-};
-
-
-////////////////////////////////////////////////////////////////////////////////
-///
-/// \class MemoryWriteStream
-/// ------------------------
-///
-////////////////////////////////////////////////////////////////////////////////
-
-class MemoryWriteStream : public MemoryStreamBase
-{
-public:
-    MemoryWriteStream( writable_memory_chunk_t const & in_memory_image )
-        :
-        MemoryStreamBase( in_memory_image ) {}
-
-private:
-    HRESULT STDMETHODCALLTYPE Write( void const * const pv, ULONG const cb, ULONG * const pcbWritten ) override
-    {
-        assert( pv );
-        size_t const size_written( adjust_size_for_remaining_space( cb ) );
-        std::memcpy( pCurrentPosition_, pv, size_written );
-        pCurrentPosition_ += size_written;
-        if ( pcbWritten )
-            *pcbWritten = size_written;
-        return ( size_written == cb ) ? S_OK : S_FALSE;
-    }
-};
-
 
 #pragma warning( pop )
 
+
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class device_stream_wrapper
+///
+////////////////////////////////////////////////////////////////////////////////
+
+struct __declspec( novtable ) istream_placeholder_helper : private StreamBase { void * handle; };
+typedef aligned_storage<sizeof( istream_placeholder_helper ), sizeof( void *)> istream_placeholder;
+
+#ifdef NDEBUG
+    BOOST_STATIC_ASSERT( sizeof( istream_placeholder ) <= sizeof( void * ) * 2 /* vtable + handle */ );
+#endif
+
+template <template <typename Handle> class IODeviceStream, class BackendWriter>
+class device_stream_wrapper
+    :
+    private istream_placeholder,
+    public  BackendWriter
+{
+public:
+    template <class DeviceHandle>
+    device_stream_wrapper( DeviceHandle const handle )
+        :
+        BackendWriter( *( new ( istream_placeholder::address() ) IODeviceStream<DeviceHandle>( handle ) ) )
+    {
+        BOOST_STATIC_ASSERT( sizeof( IODeviceStream<DeviceHandle> ) <= sizeof( istream_placeholder ) );
+    }
+
+    template <class DeviceHandle, typename SecondParameter>
+    device_stream_wrapper( DeviceHandle const handle, SecondParameter const & second_parameter )
+        :
+        BackendWriter
+        (
+            *( new ( istream_placeholder::address() ) IODeviceStream<DeviceHandle>( handle ) ),
+            second_parameter
+        )
+    {
+        BOOST_STATIC_ASSERT( sizeof( IODeviceStream<DeviceHandle> ) <= sizeof( istream_placeholder ) );
+    }
+};
+
 //------------------------------------------------------------------------------
 } // namespace detail
+//------------------------------------------------------------------------------
+} // namespace io
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

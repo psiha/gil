@@ -26,7 +26,9 @@
 #if defined( _STDINT ) && !defined( _INTSAFE_H_INCLUDED_ )
     #define _INTSAFE_H_INCLUDED_
 #endif
-#define COM_NO_WINDOWS_H
+#ifndef COM_NO_WINDOWS_H
+    #define COM_NO_WINDOWS_H
+#endif // COM_NO_WINDOWS_H
 #include "objbase.h"
 #include "wincodec.h"
 //------------------------------------------------------------------------------
@@ -34,6 +36,9 @@ namespace boost
 {
 //------------------------------------------------------------------------------
 namespace gil
+{
+//------------------------------------------------------------------------------
+namespace io
 {
 //------------------------------------------------------------------------------
 namespace detail
@@ -60,7 +65,7 @@ private:
 
 public:
     com_scoped_ptr() : baseCOMPtr_( NULL ) {}
-    com_scoped_ptr( COMInterface const * const baseCOMPtr ) : baseCOMPtr_( baseCOMPtr ) { if ( baseCOMPtr ) baseCOMPtr->AddRef(); }
+    com_scoped_ptr( COMInterface const * const baseCOMPtr ) : baseCOMPtr_( baseCOMPtr ) { if ( baseCOMPtr  ) baseCOMPtr ->AddRef(); }
     com_scoped_ptr( com_scoped_ptr const & source ) : baseCOMPtr_( source.baseCOMPtr_ ) { if ( baseCOMPtr_ ) baseCOMPtr_->AddRef(); }
     com_scoped_ptr( IUnknown & source )
     {
@@ -123,7 +128,7 @@ class wic_factory
 public:
     static IWICImagingFactory & singleton()
     {
-        BOOST_ASSERT( p_imaging_factory_ && "WIC not initialized!" );
+        BOOST_ASSERT_MSG( p_imaging_factory_, "WIC not initialized!" );
         return *p_imaging_factory_;
     }
 
@@ -133,14 +138,16 @@ public:
         creator()
         {
             HRESULT hr( ::CoInitializeEx( 0, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE | COINIT_SPEED_OVER_MEMORY ) );
-            if
-            (
-                ( ( hr != S_OK ) && ( hr != S_FALSE ) ) ||
-                ( ( hr = wic_factory::p_imaging_factory_.create_instance( CLSID_WICImagingFactory ) ) != S_OK )
-            )
+            if ( SUCCEEDED( hr ) )
+                hr = wic_factory::p_imaging_factory_.create_instance( CLSID_WICImagingFactory );
+
+            if ( FAILED( hr ) )
                 io_error( "Boost.GIL failed to load external library." ); //...zzz...duplicated...
+
+            BOOST_ASSERT( hr == S_OK                      );
             BOOST_ASSERT( wic_factory::p_imaging_factory_ );
         }
+
         ~creator()
         {
             wic_factory::p_imaging_factory_.release();
@@ -177,6 +184,8 @@ com_scoped_ptr<IWICImagingFactory> wic_factory::p_imaging_factory_;
 
 //------------------------------------------------------------------------------
 } // namespace detail
+//------------------------------------------------------------------------------
+} // namespace io
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------
