@@ -171,7 +171,7 @@ private:
     BOOST_STATIC_ASSERT
     ((
         supported_by_native_writer_t::value ||
-        !unknown_output_device<Target>::value
+        !unknown_device<Target>     ::value
     ));
 
     typedef typename mpl::if_

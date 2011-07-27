@@ -30,10 +30,20 @@ namespace io
 {
 //------------------------------------------------------------------------------
 
-template <> struct input_device<char const *>
+
+template <>
+struct device<char const *> : device<c_file_descriptor_t>
+{
+    static bool const auto_closes = true;
+};
+
+template <>
+struct input_device<char const *>
     :
     input_device<c_file_descriptor_t>
 {
+    static bool const auto_closes = true;
+
     input_device( char const * const p_file_name )
         :
         file_descriptor_( input_device<c_file_descriptor_t>::open( p_file_name ) )
@@ -49,10 +59,13 @@ template <> struct input_device<char const *>
 };
 
 
-template <> struct output_device<char const *>
+template <>
+struct output_device<char const *>
     :
     output_device<c_file_descriptor_t>
 {
+    static bool const auto_closes = true;
+
     output_device( char const * const p_file_name )
         :
         file_descriptor_( output_device<c_file_descriptor_t>::open( p_file_name ) )

@@ -168,13 +168,13 @@ typedef mpl::vector35
 template <typename Handle>
 toff_t seek( thandle_t const handle, toff_t const off, int const whence )
 {
-    return static_cast<tsize_t>( input_device<Handle>::seek( static_cast<device_base::seek_origin>( whence ), off, reinterpret_cast<Handle>( handle ) ) );
+    return static_cast<tsize_t>( device<Handle>::seek( static_cast<device_base::seek_origin>( whence ), off, reinterpret_cast<Handle>( handle ) ) );
 }
 
 template <typename Handle>
 int close( thandle_t const handle )
 {
-    input_device<Handle>::close( reinterpret_cast<Handle>( handle ) );
+    device<Handle>::close( reinterpret_cast<Handle>( handle ) );
     return 0;
 }
 
@@ -186,7 +186,7 @@ inline int nop_close( thandle_t /*handle*/ )
 template <typename Handle>
 toff_t size( thandle_t const fd )
 {
-    return static_cast<toff_t>( input_device<Handle>::size( reinterpret_cast<Handle>( handle ) ) );
+    return static_cast<toff_t>( device<Handle>::size( reinterpret_cast<Handle>( handle ) ) );
 }
 
 
@@ -253,9 +253,7 @@ struct tiff_view_data_t
 
     void set_format( full_format_t::format_id const format )
     {
-        #ifdef _DEBUG
-            BOOST_ASSERT( ( format_id_ == format ) && !"libtiff does not provide builtin conversion." );
-        #endif // _DEBUG
+        BOOST_ASSERT_MSG( format_id_ == format, "LibTIFF does not provide builtin conversion." );
         ignore_unused_variable_warning( format );
     }
 
@@ -336,6 +334,12 @@ struct backend_traits<libtiff_image>
 };
 
 
+////////////////////////////////////////////////////////////////////////////////
+///
+/// \class libtiff_image
+///
+////////////////////////////////////////////////////////////////////////////////
+
 class libtiff_image
     :
     public detail::backend<libtiff_image>
@@ -380,7 +384,7 @@ protected:
                     read_proc,
                     write_proc,
                     &detail::seek<DeviceHandle>,
-                    &detail::nop_close, //&detail::close<<DeviceHandle>>
+                    device<DeviceHandle>::auto_closes ? &detail::nop_close : &detail::close<<DeviceHandle>
                     &detail::size<<DeviceHandle>,
                     map_proc,
                     unmap_proc

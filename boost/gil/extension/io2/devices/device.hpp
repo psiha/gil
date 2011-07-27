@@ -32,16 +32,13 @@ namespace io
 //------------------------------------------------------------------------------
 
 template <typename Handle>
-struct input_device : mpl::false_ {};
+struct device : mpl::false_ {};
 
-template <typename Handle>
-struct output_device : mpl::false_ {};
-
-template <typename Device>
-struct unknown_input_device : is_convertible<input_device<Device>, mpl::false_> {};
+template <typename Handle> struct input_device;
+template <typename Handle> struct output_device;
 
 template <typename Device>
-struct unknown_output_device : is_convertible<output_device<Device>, mpl::false_> {};
+struct unknown_device : is_convertible<device<Device>, mpl::false_> {};
 
 
 namespace detail
@@ -51,7 +48,7 @@ namespace detail
         enum seek_origin { beginning = SEEK_SET, current_position = SEEK_CUR, end = SEEK_END };
     };
 
-    struct input_device_base : device_base
+    struct input_device_base
     {
         void ensure( bool const condition )
         {
@@ -59,7 +56,7 @@ namespace detail
         }
     };
 
-    struct output_device_base : device_base
+    struct output_device_base
     {
         void ensure( bool const condition )
         {

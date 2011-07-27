@@ -72,7 +72,7 @@ struct reader_for
     BOOST_STATIC_ASSERT
     ((
         supported_by_native_reader_t::value ||
-        !unknown_input_device<Source>::value
+        !unknown_device<Source>     ::value
     ));
 
     typedef typename mpl::if_

@@ -34,55 +34,57 @@ namespace io
 {
 //------------------------------------------------------------------------------
 
-namespace detail
+template <>
+struct device<FILE *> : detail::device_base
 {
-    struct device_FILE_base
+    typedef FILE * handle_t;
+
+    static bool const auto_closes = false;
+
+    static handle_t    transform    ( handle_t const handle ) { return handle; }
+    static bool        is_valid     ( handle_t const handle ) { return handle != 0; }
+    static void        close        ( handle_t const handle ) { BOOST_VERIFY( /*std*/::fclose( handle ) == 0 ); }
+    static std::size_t position     ( handle_t const handle ) { return std::ftell( handle ); }
+    static uintmax_t   position_long( handle_t const handle )
     {
-        typedef FILE * handle_t;
+        #ifdef BOOST_MSVC
+            return /*std*/::_ftelli64( handle );
+        #else
+            return /*std*/::ftell64  ( handle );
+        #endif // BOOST_MSVC
+    }
 
-        static handle_t    transform    ( handle_t const handle ) { return handle; }
-        static bool        is_valid     ( handle_t const handle ) { return handle != 0; }
-        static void        close        ( handle_t const handle ) { BOOST_VERIFY( /*std*/::fclose( handle ) == 0 ); }
-        static std::size_t position     ( handle_t const handle ) { return std::ftell( handle ); }
-        static uintmax_t   position_long( handle_t const handle )
-        {
-            #ifdef BOOST_MSVC
-                return /*std*/::_ftelli64( handle );
-            #else
-                return /*std*/::ftell64  ( handle );
-            #endif // BOOST_MSVC
-        }
+    static std::size_t size( handle_t const handle )
+    {
+        return device<c_file_descriptor_t>::size( /*std*/::_fileno( handle ) );
+    }
 
-        static std::size_t size( handle_t const handle )
-        {
-            return device<c_file_descriptor_t>::size( /*std*/::_fileno( handle ) );
-        }
+    static uintmax_t size_long( handle_t const handle )
+    {
+        return device<c_file_descriptor_t>::size_long( /*std*/::_fileno( handle ) );
+    }
 
-        static uintmax_t size_long( handle_t const handle )
-        {
-            return device<c_file_descriptor_t>::size_long( /*std*/::_fileno( handle ) );
-        }
+    static bool seek( seek_origin const origin, off_t const offset, handle_t const handle )
+    {
+        return std::fseek( handle, offset, origin ) != 0;
+    }
 
-        static bool seek( seek_origin const origin, off_t const offset, handle_t const handle )
-        {
-            return std::fseek( handle, offset, origin ) != 0;
-        }
+    static bool seek_long( seek_origin const origin, intmax_t const offset, handle_t const handle )
+    {
+        #ifdef BOOST_MSVC
+            return /*std*/::_fseeki64( handle, offset, origin ) != 0;
+        #else
+            return /*std*/::fseeko   ( handle, offset, origin ) != 0;
+        #endif
+    }
+};
 
-        static bool seek_long( seek_origin const origin, intmax_t const offset, handle_t const handle )
-        {
-            #ifdef BOOST_MSVC
-                return /*std*/::_fseeki64( handle, offset, origin ) != 0;
-            #else
-                return /*std*/::fseeko   ( handle, offset, origin ) != 0;
-            #endif
-        }
-    };
-} // namespace detail
 
-template <> struct input_device<FILE *>
+template <>
+struct input_device<FILE *>
     :
     detail::input_device_base,
-    detail::device_FILE_base
+    device<FILE *>
 {
     input_device( handle_t /*handle*/ ) {}
 
@@ -98,10 +100,11 @@ template <> struct input_device<FILE *>
 };
 
 
-template <> struct output_device<FILE *>
+template <>
+struct output_device<FILE *>
     :
     detail::output_device_base,
-    detail::device_FILE_base
+    device<FILE *>
 {
     output_device( handle_t /*handle*/ ) {}
 
