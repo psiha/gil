@@ -25,6 +25,8 @@
 #include "detail/platform_specifics.hpp"
 #include "detail/shared.hpp"
 
+#include "boost/gil/image_view_factory.hpp"
+
 #include <boost/array.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
