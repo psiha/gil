@@ -1,7 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file libtiff_image.hpp
-/// -----------------------
+/// \file backend.hpp
+/// -----------------
+///
+/// LibTIFF backend.
 ///
 /// Copyright (c) Domagoj Saric 2010.
 ///
@@ -13,16 +15,16 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef libtiff_image_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
-#define libtiff_image_hpp__0808D24E_CED1_4921_A832_3C12DAE93Ef7
+#ifndef backend_hpp__0808D24E_CED1_4921_A832_3C12DAE93EF7
+#define backend_hpp__0808D24E_CED1_4921_A832_3C12DAE93EF7
 #pragma once
 //------------------------------------------------------------------------------
-#include "formatted_image.hpp"
+#include "boost/gil/extension/io2/backends/detail/backend.hpp"
 
-#include "detail/io_error.hpp"
-#include "detail/libx_shared.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/shared.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/libx_shared.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/shared.hpp"
 
 #if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
     #error libtiff support requires mpl vectors of size 35 or greater...
@@ -267,7 +269,7 @@ struct tiff_view_data_t
         unsigned int format_id_;
     #endif
 
-private: // this should probably go to the base formatted_image class...
+private: // this should probably go to the base backend class...
     template <class View>
     void set_buffers( View const & view, mpl::true_ /*is planar*/ )
     {
@@ -282,7 +284,7 @@ private: // this should probably go to the base formatted_image class...
     void set_buffers( View const & view, mpl::false_ /*is not planar*/ )
     {
         number_of_planes_ = 1;
-        plane_buffers_[ 0 ] = formatted_image_base::get_raw_data( view );
+        plane_buffers_[ 0 ] = backend_base::get_raw_data( view );
     }
 
     void operator=( tiff_view_data_t const & );
@@ -296,7 +298,7 @@ struct tiff_writer_view_data_t;
 class libtiff_image;
 
 template <>
-struct formatted_image_traits<libtiff_image>
+struct backend_traits<libtiff_image>
 {
     typedef detail::full_format_t::format_id format_t;
 
@@ -336,7 +338,7 @@ struct formatted_image_traits<libtiff_image>
 
 class libtiff_image
     :
-    public detail::formatted_image<libtiff_image>
+    public detail::backend<libtiff_image>
 {
 public:
     struct guard {};
@@ -428,7 +430,7 @@ protected:
         return value;
     }
 
-    static std::size_t cached_format_size( formatted_image_traits<libtiff_image>::format_t const format )
+    static std::size_t cached_format_size( backend_traits<libtiff_image>::format_t const format )
     {
         full_format_t::format_bitfield const & bits( reinterpret_cast<full_format_t const &>( format ).bits );
         return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
@@ -462,4 +464,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // libtiff_image_hpp
+#endif // backend_hpp

@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file formatted_image.hpp
-/// -------------------------
+/// \file backend.hpp
+/// -----------------
 ///
 /// Base CRTP class for all image implementation classes/backends.
 ///
@@ -15,24 +15,20 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
-#define formatted_image_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
+#ifndef backend_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
+#define backend_hpp__C34C1FB0_A4F5_42F3_9318_5805B88CFE49
 #pragma once
 //------------------------------------------------------------------------------
-#include "format_tags.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/io_error.hpp"
-#include "detail/switch.hpp"
+#include "boost/gil/extension/io2/format_tags.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/switch.hpp"
 
 #include "boost/gil/packed_pixel.hpp"
 #include "boost/gil/planar_pixel_iterator.hpp"
 #include "boost/gil/planar_pixel_reference.hpp"
 #include "boost/gil/typedefs.hpp"
 
-#include <boost/compressed_pair.hpp>
-#ifdef _DEBUG
-#include <boost/detail/endian.hpp>
-#endif // _DEBUG
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/for_each.hpp>
 #include <boost/mpl/integral_c.hpp>
@@ -112,12 +108,12 @@ namespace io
 //------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
+/// \class backend_traits
 /// ( forward declaration )
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
-struct formatted_image_traits;
+struct backend_traits;
 
 template <class Backend, typename Source>
 struct reader_for;
@@ -131,11 +127,11 @@ namespace detail
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class formatted_image_base
+/// \class backend_base
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class formatted_image_base : noncopyable
+class backend_base : noncopyable
 {
 public: // Low-level (row, strip, tile) access
     struct sequential_row_read_state { BOOST_STATIC_CONSTANT( bool, throws_on_error = true ); };
@@ -188,23 +184,23 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class formatted_image
+/// \class backend
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
-class formatted_image : public formatted_image_base
+class backend : public backend_base
 {
 public:
-    //typedef typename formatted_image_traits<Impl>::format_t format_t;
+    //typedef typename backend_traits<Impl>::format_t format_t;
 
-    typedef typename formatted_image_traits<Impl>::supported_pixel_formats_t supported_pixel_formats;
-    typedef typename formatted_image_traits<Impl>::roi_t                     roi;
+    typedef typename backend_traits<Impl>::supported_pixel_formats_t supported_pixel_formats;
+    typedef typename backend_traits<Impl>::roi_t                     roi;
     typedef typename roi::offset_t                                           offset_t;
 
     template <typename PixelType, bool IsPlanar>
     struct native_format
-        : formatted_image_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
+        : backend_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
     {};
 
     template <typename T> struct get_native_format;
@@ -224,9 +220,9 @@ public:
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<typename roi::offset_t, typename roi::point_t>::value) );
 
 protected:
-    typedef          formatted_image                           base_t;
+    typedef          backend                           base_t;
 
-    //typedef typename formatted_image_traits<Impl>::view_data_t view_data_t;
+    //typedef typename backend_traits<Impl>::view_data_t view_data_t;
 
 private:
     // MSVC++ 10 generates code to check whether this == 0.
@@ -244,4 +240,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // formatted_image_hpp
+#endif // backend_hpp

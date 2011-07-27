@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file backend_reader.hpp
-/// ------------------------
+/// \file reader.hpp
+/// ----------------
 ///
 /// Base CRTP class for backend readers.
 ///
@@ -15,14 +15,16 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef backend_reader_hpp__3E2ACB3B_F45F_404B_A603_0396518B183C
-#define backend_reader_hpp__3E2ACB3B_F45F_404B_A603_0396518B183C
+#ifndef reader_hpp__3E2ACB3B_F45F_404B_A603_0396518B183C
+#define reader_hpp__3E2ACB3B_F45F_404B_A603_0396518B183C
 #pragma once
 //------------------------------------------------------------------------------
-#include "format_tags.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/io_error.hpp"
-#include "detail/switch.hpp"
+#include "reader_for.hpp"
+
+#include "boost/gil/extension/io2/format_tags.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/switch.hpp"
 
 #include "boost/gil/planar_pixel_iterator.hpp"
 #include "boost/gil/planar_pixel_reference.hpp"
@@ -106,12 +108,12 @@ private:
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
+/// \class backend_traits
 /// ( forward declaration )
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
-struct formatted_image_traits;
+struct backend_traits;
 
 namespace detail
 {
@@ -274,7 +276,7 @@ protected:
         typedef typename get_original_view_t<View>::type original_view_t;
 
     public:
-        typedef typename formatted_image_traits<Backend>:: BOOST_NESTED_TEMPLATE is_supported
+        typedef typename backend_traits<Backend>:: BOOST_NESTED_TEMPLATE is_supported
         <
             typename original_view_t::value_type,
             is_planar<original_view_t>::value
@@ -283,8 +285,8 @@ protected:
     };
 
 protected:
-    typedef typename formatted_image_traits<Backend>::format_t    format_t;
-    typedef typename formatted_image_traits<Backend>::view_data_t view_data_t;
+    typedef typename backend_traits<Backend>::format_t    format_t;
+    typedef typename backend_traits<Backend>::view_data_t view_data_t;
 
 private:
     typedef mpl::range_c<std::size_t, 0, mpl::size<typename Backend::supported_pixel_formats>::value> valid_type_id_range_t;
@@ -322,18 +324,18 @@ protected:
     template <typename View>
     bool dimensions_mismatch( View const & view ) const
     {
-        return formatted_image_base::dimensions_mismatch( impl().dimensions(), view );
+        return backend_base::dimensions_mismatch( impl().dimensions(), view );
     }
 
     bool dimensions_mismatch( dimensions_t const & other_dimensions ) const
     {
-        return formatted_image_base::dimensions_mismatch( impl().dimensions(), other_dimensions );
+        return backend_base::dimensions_mismatch( impl().dimensions(), other_dimensions );
     }
 
     template <class View>
     void do_ensure_dimensions_match( View const & view ) const
     {
-        formatted_image_base::do_ensure_dimensions_match( impl().dimensions(), view );
+        backend_base::do_ensure_dimensions_match( impl().dimensions(), view );
     }
 
     template <typename View>
@@ -348,7 +350,7 @@ protected:
     }
 
     template <class View>
-    void do_ensure_formats_match() const { formatted_image_base::do_ensure_formats_match( formats_mismatch<View>() ); }
+    void do_ensure_formats_match() const { backend_base::do_ensure_formats_match( formats_mismatch<View>() ); }
 
     template <typename View>
     bool can_do_inplace_transform() const
@@ -368,7 +370,7 @@ protected:
     template <typename View, typename Offset>
     View subview_for_offset( offset_view_t<View, Offset> const & offset_view ) const
     {
-        return formatted_image_base::subview_for_offset( impl().dimensions(), offset_view );
+        return backend_base::subview_for_offset( impl().dimensions(), offset_view );
     }
 
     template <typename View>
@@ -456,7 +458,7 @@ public: // Views...
         typedef mpl::bool_
         <
             has_supported_format  <View   >::value &&
-            formatted_image_traits<Backend>::builtin_conversion
+            backend_traits<Backend>::builtin_conversion
         > can_use_raw_t;
         default_convert_to_worker( view, can_use_raw_t() );
     }
@@ -479,7 +481,7 @@ public: // Images...
     template <typename Image, typename FormatsPolicy>
     Image copy_to_image( FormatsPolicy const formats_policy ) const
     {
-        Image image( impl().dimensions(), formatted_image_traits<Backend>::desired_alignment );
+        Image image( impl().dimensions(), backend_traits<Backend>::desired_alignment );
         impl().copy_to( view( image ), assert_dimensions_match(), formats_policy );
         return image;
     }
@@ -493,7 +495,7 @@ public: // Images...
     template <typename Image, typename FormatsPolicy>
     void copy_to_image( Image & image, synchronize_dimensions, FormatsPolicy const formats_policy ) const
     {
-        impl().do_synchronize_dimensions( image, impl().dimensions(), formatted_image_traits<Backend>::desired_alignment );
+        impl().do_synchronize_dimensions( image, impl().dimensions(), backend_traits<Backend>::desired_alignment );
         impl().copy_to( view( image ), assert_dimensions_match(), formats_policy );
     }
 
@@ -651,7 +653,7 @@ private:
                 cc,
                 offset_new_view
                 (
-                    // See the note for formatted_image_base::subview_for_offset()...
+                    // See the note for backend_base::subview_for_offset()...
                     subview_for_offset( view ),
                     view
                 )
@@ -684,7 +686,7 @@ private:
         if ( can_do_inplace_transform<View>( current_format ) )
         {
             view_data_t view_data( get_view_data( view ) );
-            if ( formatted_image_traits<Backend>::builtin_conversion )
+            if ( backend_traits<Backend>::builtin_conversion )
                 view_data.set_format( current_format );
             else
                 BOOST_ASSERT( current_format == impl().format() );
@@ -726,4 +728,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // backend_reader_hpp
+#endif // reader_hpp

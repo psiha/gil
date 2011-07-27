@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file wic_image.hpp
-/// -------------------
+/// \file backend.hpp
+/// -----------------
 ///
 /// Base IO interface WIC implementation.
 ///
@@ -15,16 +15,18 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef wic_image_hpp__78D710F7_11C8_4023_985A_22B180C9A476
-#define wic_image_hpp__78D710F7_11C8_4023_985A_22B180C9A476
+#ifndef backend_hpp__78D710F7_11C8_4023_985A_22B180C9A476
+#define backend_hpp__78D710F7_11C8_4023_985A_22B180C9A476
 #pragma once
 //------------------------------------------------------------------------------
-#include "detail/io_error.hpp"
-#include "detail/shared.hpp"
-#include "detail/wic_extern_lib_guard.hpp"
-#include "detail/windows_shared.hpp"
-#include "detail/windows_shared_istreams.hpp"
-#include "formatted_image.hpp"
+#include "extern_lib_guard.hpp"
+
+#include "boost/gil/extension/io2/backends/detail/backend.hpp"
+
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/shared.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared_istreams.hpp"
 
 #include <boost/mpl/vector_c.hpp> //...missing from metafuncitons.hpp...
 #include "boost/gil/metafunctions.hpp"
@@ -186,7 +188,7 @@ private:
         stride_     = view.pixels().row_size();
         pixel_size_ = memunit_step( typename View::x_iterator() );
         //format_     = gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value;
-        p_buffer_   = detail::formatted_image_base::get_raw_data( view );
+        p_buffer_   = detail::backend_base::get_raw_data( view );
     }
 
     void operator=( wic_view_data_t const & );
@@ -205,7 +207,7 @@ class device_stream_wrapper;
 class wic_image;
 
 template <>
-struct formatted_image_traits<wic_image>
+struct backend_traits<wic_image>
 {
     typedef detail::wic_format_t format_t;
 
@@ -262,7 +264,7 @@ struct formatted_image_traits<wic_image>
 class wic_image
     :
     private detail::wic_base_guard,
-    public  detail::formatted_image<wic_image>
+    public  detail::backend<wic_image>
 {
 public:
     typedef detail::wic_user_guard guard;
@@ -284,4 +286,4 @@ public: // Low-level (row, strip, tile) access
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // wic_image_hpp
+#endif // backend_hpp

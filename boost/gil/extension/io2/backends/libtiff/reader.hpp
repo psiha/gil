@@ -1,7 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file libtiff_reader.hpp
-/// ------------------------
+/// \file reader.hpp
+/// ----------------
+///
+/// LibTIFF reader
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -13,17 +15,17 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef libtiff_reader_hpp__24E9D122_DAC7_415B_8880_9BFA03916E9F
-#define libtiff_reader_hpp__24E9D122_DAC7_415B_8880_9BFA03916E9F
+#ifndef reader_hpp__24E9D122_DAC7_415B_8880_9BFA03916E9F
+#define reader_hpp__24E9D122_DAC7_415B_8880_9BFA03916E9F
 #pragma once
 //------------------------------------------------------------------------------
-#include "backend_reader.hpp"
-#include "libtiff_image.hpp"
+#include "backend.hpp"
+#include "../detail/reader.hpp"
 
-#include "detail/io_error.hpp"
-#include "detail/libx_shared.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/shared.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/libx_shared.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/shared.hpp"
 
 #include "boost/gil/image_view_factory.hpp"
 
@@ -214,13 +216,13 @@ private:
         return ( dividend + divisor - 1 ) / divisor;
     }
 
-private: // Private formatted_image_base interface.
+private: // Private backend_base interface.
     // Implementation note:
     //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
     // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
     // neither.
     //                                        (13.01.2011.) (Domagoj Saric)
-    friend class detail::formatted_image<libtiff_image::native_reader>;
+    friend class detail::backend<libtiff_image::native_reader>;
 
     struct tile_setup_t
         #ifndef __GNUC__
@@ -850,4 +852,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // libtiff_reader_hpp
+#endif // reader_hpp

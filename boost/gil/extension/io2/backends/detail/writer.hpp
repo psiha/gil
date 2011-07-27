@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file backend_writer.hpp
-/// ------------------------
+/// \file writer.hpp
+/// ----------------
 ///
 /// Base CRTP class for backend writers.
 ///
@@ -15,13 +15,15 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef backend_writer_hpp__D65DA8BE_0605_4A62_AC73_B557F7A94DA6
-#define backend_writer_hpp__D65DA8BE_0605_4A62_AC73_B557F7A94DA6
+#ifndef writer_hpp__D65DA8BE_0605_4A62_AC73_B557F7A94DA6
+#define writer_hpp__D65DA8BE_0605_4A62_AC73_B557F7A94DA6
 #pragma once
 //------------------------------------------------------------------------------
-#include "format_tags.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/io_error.hpp"
+#include "writer_for.hpp"
+
+#include "boost/gil/extension/io2/format_tags.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
 
 #include "boost/gil/typedefs.hpp"
 
@@ -39,12 +41,12 @@ namespace io
 //------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
+/// \class backend_traits
 /// ( forward declaration )
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
-struct formatted_image_traits;
+struct backend_traits;
 
 
 namespace detail
@@ -61,7 +63,7 @@ template <class Backend>
 class backend_writer
 {
 protected:
-    typedef typename formatted_image_traits<Backend>::view_data_t view_data_t;
+    typedef typename backend_traits<Backend>::view_data_t view_data_t;
 
 private:
     // MSVC++ (8,9,10) generates code to check whether this == 0.
@@ -110,4 +112,4 @@ public: // Utility 'quick-wrappers'...
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // backend_writer_hpp
+#endif // writer_hpp

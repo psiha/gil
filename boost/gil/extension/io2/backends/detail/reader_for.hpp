@@ -1,9 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file formatted_image.hpp
-/// -------------------------
-///
-/// Base CRTP class for all image implementation classes/backends.
+/// \file reader_for.hpp
+/// --------------------
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -15,13 +13,14 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef reader_hpp__1733426F_1D8C_4F4E_A966_BDB6426AA88C
-#define reader_hpp__1733426F_1D8C_4F4E_A966_BDB6426AA88C
+#ifndef reader_for_hpp__1733426F_1D8C_4F4E_A966_BDB6426AA88C
+#define reader_for_hpp__1733426F_1D8C_4F4E_A966_BDB6426AA88C
 #pragma once
 //------------------------------------------------------------------------------
-#include "format_tags.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/io_error.hpp"
+#include "boost/gil/extension/io2/format_tags.hpp"
+#include "boost/gil/extension/io2/devices/device.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
 
 #include "boost/gil/typedefs.hpp"
 
@@ -56,18 +55,18 @@ namespace detail
 
 
 ////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
+/// \class backend_traits
 /// ( forward declaration )
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
-struct formatted_image_traits;
+struct backend_traits;
 
 
 template <class Backend, typename Source>
 struct reader_for
 {
-    typedef typename mpl::has_key<typename formatted_image_traits<Backend>::native_sources, Source>::type supported_by_native_reader_t;
+    typedef typename mpl::has_key<typename backend_traits<Backend>::native_sources, Source>::type supported_by_native_reader_t;
 
     // The backend does not seem to provide a reader for the specified target...
     BOOST_STATIC_ASSERT
@@ -95,4 +94,4 @@ struct reader_for<Backend, char *> : reader_for<Backend, char const *> {};
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // reader_hpp
+#endif // reader_for_hpp

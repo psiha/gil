@@ -1,9 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file formatted_image.hpp
-/// -------------------------
-///
-/// Base CRTP class for all image implementation classes/backends.
+/// \file dynamic_image_hpp
+/// -----------------------
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///

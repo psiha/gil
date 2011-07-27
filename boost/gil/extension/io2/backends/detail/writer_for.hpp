@@ -1,9 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file formatted_image.hpp
-/// -------------------------
-///
-/// Base CRTP class for all image implementation classes/backends.
+/// \file writer_for.hpp
+/// --------------------
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -15,8 +13,8 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef writer_hpp__CBE52E51_7B06_4018_996A_63F9B7DF05AC
-#define writer_hpp__CBE52E51_7B06_4018_996A_63F9B7DF05AC
+#ifndef writer_for_hpp__CBE52E51_7B06_4018_996A_63F9B7DF05AC
+#define writer_for_hpp__CBE52E51_7B06_4018_996A_63F9B7DF05AC
 #pragma once
 //------------------------------------------------------------------------------
 
@@ -31,14 +29,13 @@ namespace io
 {
 //------------------------------------------------------------------------------
 
-
 ////////////////////////////////////////////////////////////////////////////////
-/// \class formatted_image_traits
+/// \class backend_traits
 /// ( forward declaration )
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Backend>
-struct formatted_image_traits;
+struct backend_traits;
 
 namespace detail
 {
@@ -163,12 +160,12 @@ template <class Backend, typename Target>
 struct writer_for
 {
 private:
-    typedef typename formatted_image_traits<Backend>::supported_image_formats supported_image_formats;
+    typedef typename backend_traits<Backend>::supported_image_formats supported_image_formats;
 
     BOOST_STATIC_CONSTANT( format_tag, default_format = mpl::front<supported_image_formats>::type::value );
     BOOST_STATIC_CONSTANT( bool      , single_format  = mpl::size <supported_image_formats>::value == 1  );
 
-    typedef typename mpl::has_key<typename formatted_image_traits<Backend>::native_sinks, Target>::type supported_by_native_writer_t;
+    typedef typename mpl::has_key<typename backend_traits<Backend>::native_sinks, Target>::type supported_by_native_writer_t;
 
     // The backend does not seem to provide a writer for the specified target...
     BOOST_STATIC_ASSERT
@@ -196,7 +193,7 @@ public:
     <
         first_layer_wrapper,
         Target,
-        typename formatted_image_traits<Backend>::writer_view_data_t,
+        typename backend_traits<Backend>::writer_view_data_t,
         default_format
     > type;
 };
@@ -208,4 +205,4 @@ public:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // writer_hpp
+#endif // writer_for_hpp

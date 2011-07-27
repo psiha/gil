@@ -17,7 +17,7 @@
 #define device_hpp__0B0D753B_4DAB_4EAF_8F73_780FF1D1F4D6
 #pragma once
 //------------------------------------------------------------------------------
-#include "detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
 
 #include "boost/type_traits/is_convertible.hpp"
 //------------------------------------------------------------------------------

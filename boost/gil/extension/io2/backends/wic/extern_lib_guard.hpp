@@ -1,9 +1,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file wic_extern_lib_guard.hpp
-/// ------------------------------
+/// \file extern_lib_guard.hpp
+/// --------------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// WIC extern lib guard
+///
+/// Copyright (c) Domagoj Saric 2010.-2011.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -13,11 +15,11 @@
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
 #pragma once
-#ifndef wic_extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
-#define wic_extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
+#ifndef extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
+#define extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
 //------------------------------------------------------------------------------
-#include "extern_lib.hpp"
-#include "io_error.hpp"
+#include "boost/gil/extension/io2/backends/detail/extern_lib_guard.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
 
 #include <boost/preprocessor/comparison/greater.hpp>
 
@@ -191,4 +193,4 @@ com_scoped_ptr<IWICImagingFactory> wic_factory::p_imaging_factory_;
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // wic_extern_lib_guard_hpp
+#endif // extern_lib_guard_hpp

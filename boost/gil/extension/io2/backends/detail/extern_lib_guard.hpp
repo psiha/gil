@@ -133,9 +133,9 @@ public:
         if ( !delayed_lib_.is_initialized() )
             delayed_lib_ = in_place( lib_name );
         else
-            BOOST_ASSERT
+            BOOST_ASSERT_MSG
             (
-                ( delayed_lib_->lib_handle() == win32_preloaded_reloadable_lib( lib_name ).lib_handle() ) &&
+                ( delayed_lib_->lib_handle() == win32_preloaded_reloadable_lib( lib_name ).lib_handle() ),
                 "Library reloaded/relocated!"
             );
     }
@@ -145,9 +145,9 @@ public:
         if ( !delayed_lib_.is_initialized() )
             delayed_lib_ = in_place( lib_name );
         else
-            BOOST_ASSERT
+            BOOST_ASSERT_MSG
             (
-                ( delayed_lib_->lib_handle() == win32_preloaded_reloadable_lib( lib_name ).lib_handle() ) &&
+                ( delayed_lib_->lib_handle() == win32_preloaded_reloadable_lib( lib_name ).lib_handle() ),
                 "Library reloaded/relocated!"
             );
     }
@@ -193,9 +193,9 @@ public:
         if ( !delayed_lib_.is_initialized() )
             delayed_lib_ = in_place( lib_name );
         else
-            BOOST_ASSERT
+            BOOST_ASSERT_MSG
             (
-                ( delayed_lib_->lib_handle() == win32_reloadable_lib_guard( lib_name ).lib_handle() ) &&
+                ( delayed_lib_->lib_handle() == win32_reloadable_lib_guard( lib_name ).lib_handle() ),
                 "Library reloaded/relocated!"
             );
     }
@@ -205,9 +205,9 @@ public:
         if ( !delayed_lib_.is_initialized() )
             delayed_lib_ = in_place( lib_name );
         else
-            BOOST_ASSERT
+            BOOST_ASSERT_MSG
             (
-                ( delayed_lib_->lib_handle() == win32_reloadable_lib_guard( lib_name ).lib_handle() ) &&
+                ( delayed_lib_->lib_handle() == win32_reloadable_lib_guard( lib_name ).lib_handle() ),
                 "Library reloaded/relocated!"
             );
     }

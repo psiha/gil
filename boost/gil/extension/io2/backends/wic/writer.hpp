@@ -1,9 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file wic_writer.hpp
-/// --------------------
+/// \file writer.hpp
+/// ----------------
 ///
-/// Base IO interface WIC implementation.
+/// WIC writer.
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -15,17 +15,16 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef wic_writer_hpp__F8E533DB_13F3_495F_9F64_0C33F7C5AB95
-#define wic_writer_hpp__F8E533DB_13F3_495F_9F64_0C33F7C5AB95
+#ifndef writer_hpp__F8E533DB_13F3_495F_9F64_0C33F7C5AB95
+#define writer_hpp__F8E533DB_13F3_495F_9F64_0C33F7C5AB95
 #pragma once
 //------------------------------------------------------------------------------
-#include "wic_image.hpp"
-#include "backend_writer.hpp"
-#include "writer.hpp"
+#include "backend.hpp"
+#include "../detail/writer.hpp"
 
-#include "detail/io_error.hpp"
-#include "detail/windows_shared.hpp"
-#include "detail/windows_shared_istreams.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared_istreams.hpp"
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -146,4 +145,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // wic_writer_hpp
+#endif // writer_hpp

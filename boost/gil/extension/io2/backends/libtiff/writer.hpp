@@ -1,7 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file libtiff_writer.hpp
-/// ------------------------
+/// \file writer.hpp
+/// ----------------
+///
+/// LibTIFF writer.
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -13,17 +15,17 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef libtiff_writer_hpp__FD402B04_E934_4E73_8839_001A8633B5D3
-#define libtiff_writer_hpp__FD402B04_E934_4E73_8839_001A8633B5D3
+#ifndef writer_hpp__FD402B04_E934_4E73_8839_001A8633B5D3
+#define writer_hpp__FD402B04_E934_4E73_8839_001A8633B5D3
 #pragma once
 //------------------------------------------------------------------------------
-#include "libtiff_image.hpp"
-#include "backend_writer.hpp"
+#include "backend.hpp"
+#include "../detail/writer.hpp"
 
-#include "detail/io_error.hpp"
-#include "detail/libx_shared.hpp"
-#include "detail/platform_specifics.hpp"
-#include "detail/shared.hpp"
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/libx_shared.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/shared.hpp"
 
 #include <boost/array.hpp>
 //------------------------------------------------------------------------------
@@ -33,16 +35,14 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
+namespace io
+{
+//------------------------------------------------------------------------------
 namespace detail
 {
 //------------------------------------------------------------------------------
 
-inline tsize_t FILE_write_proc( thandle_t const handle, tdata_t const buf, tsize_t const size )
-{
-    return static_cast<tsize_t>( std::fwrite( buf, 1, size,  reinterpret_cast<FILE *>( handle ) ) );
-}
-
-struct tiff_writer_view_data_t : public tiff_view_data_t
+struct tiff_writer_view_data_t : tiff_view_data_t
 {
     template <class View>
     tiff_writer_view_data_t( View const & view )
@@ -58,18 +58,28 @@ struct tiff_writer_view_data_t : public tiff_view_data_t
 //------------------------------------------------------------------------------
 } // namespace detail
 
-class libtiff_writer
+class libtiff_image::native_writer
     :
     public libtiff_image,
     public detail::backend_writer<libtiff_image>,
-    public configure_on_write_writer
+    public detail::configure_on_write_writer
 {
 public:
-    explicit libtiff_writer( char const * const file_name ) : libtiff_image( file_name, "w" ) {}
+    explicit native_writer( char const * const file_name ) : libtiff_image( file_name, "w" ) {}
 
-    explicit libtiff_writer( FILE & file ) : libtiff_image( file ) {}
+    template <typename DeviceHandle>
+    explicit native_writer( DeviceHandle const handle )
+        :
+        libtiff_image
+        (
+            handle,
+            NULL,
+            &input_device<DeviceHandle>::write,
+            NULL,
+            NULL
+        ),
 
-    void write_default( tiff_writer_view_data_t const & view )
+    void write_default( detail::tiff_writer_view_data_t const & view )
     {
         full_format_t::format_bitfield const format_bits( view.format_.bits );
         //BOOST_ASSERT( ( format_bits.planar_configuration == PLANARCONFIG_CONTIG ) && "Add planar support..." );
@@ -94,7 +104,7 @@ public:
         write( view );
     }
 
-    void write( tiff_writer_view_data_t const & view )
+    void write( detail::tiff_writer_view_data_t const & view )
     {
         cumulative_result result;
 
@@ -119,9 +129,9 @@ private:
     void set_field( ttag_t const tag, T value )
     {
         #ifdef _MSC_VER
-            BOOST_VERIFY( ::TIFFVSetField( &lib_object(), tag, gil_reinterpret_cast<va_list>( &value ) ) );
+            BOOST_VERIFY( ::TIFFVSetField( &lib_object(), tag, reinterpret_cast<va_list>( &value ) ) );
         #else
-            BOOST_VERIFY( ::TIFFSetField ( &lib_object(), tag,                                 value   ) );
+            BOOST_VERIFY( ::TIFFSetField ( &lib_object(), tag,                             value   ) );
         #endif // _MSC_VER
     }
 
@@ -133,8 +143,10 @@ private:
 };
 
 //------------------------------------------------------------------------------
+} // namespace io
+//------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // libtiff_writer_hpp
+#endif // writer_hpp

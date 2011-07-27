@@ -1,9 +1,9 @@
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \file wic_image.hpp
-/// -------------------
+/// \file reader.hpp
+/// ----------------
 ///
-/// Base IO interface WIC implementation.
+/// WIC reader.
 ///
 /// Copyright (c) Domagoj Saric 2010.-2011.
 ///
@@ -15,16 +15,16 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#ifndef wic_reader_hpp__8C7EFA72_9E1A_4FD4_AF3F_B7921B320C1C
-#define wic_reader_hpp__8C7EFA72_9E1A_4FD4_AF3F_B7921B320C1C
+#ifndef reader_hpp__8C7EFA72_9E1A_4FD4_AF3F_B7921B320C1C
+#define reader_hpp__8C7EFA72_9E1A_4FD4_AF3F_B7921B320C1C
 #pragma once
 //------------------------------------------------------------------------------
-#include "backend_reader.hpp"
-#include "detail/io_error.hpp"
-#include "detail/wic_extern_lib_guard.hpp"
-#include "detail/windows_shared.hpp"
-#include "detail/windows_shared_istreams.hpp"
-#include "wic_image.hpp"
+#include "backend.hpp"
+#include "../detail/reader.hpp"
+
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared.hpp"
+#include "boost/gil/extension/io2/detail/windows_shared_istreams.hpp"
 
 #include <boost/mpl/vector_c.hpp> //...missing from metafuncitons.hpp...
 #include "boost/gil/metafunctions.hpp"
@@ -73,8 +73,6 @@ public:
                 detail::com_scoped_ptr<IWICBitmapFrameDecode>,
                 detail::com_scoped_ptr<IWICBitmapDecoder    >
             > lib_object_t;
-
-    typedef detail::wic_user_guard guard;
 
 public:
     explicit native_reader( wchar_t const * const filename )
@@ -298,4 +296,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-#endif // wic_reader_hpp
+#endif // reader_hpp
