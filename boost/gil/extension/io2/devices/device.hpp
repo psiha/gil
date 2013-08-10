@@ -3,9 +3,10 @@
 /// \file device.hpp
 /// ----------------
 ///
-/// Copyright (c) Domagoj Saric 2011.
+/// Copyright (c) Domagoj Saric 2011.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -63,8 +64,7 @@ namespace detail
             io_error_if_not( condition, "Boost.GIL.IO failed to open output file." );
         }
     };
-}
-
+} // namespace detail
 
 //------------------------------------------------------------------------------
 } // namespace io

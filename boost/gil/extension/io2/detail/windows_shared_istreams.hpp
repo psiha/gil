@@ -5,9 +5,10 @@
 ///
 /// Windows IStream implementation(s) for the GIL.IO2 device concept.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -52,20 +53,20 @@ namespace detail
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
-/// \class StreamBase
-/// -----------------
+/// \class stream_base
+/// ------------------
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class __declspec( novtable ) StreamBase : public IStream, noncopyable
+class __declspec( novtable ) stream_base : public IStream, noncopyable
 {
 public:
-    static void * operator new( std::size_t, void * const p_placeholder ) { return p_placeholder; }
+    static void * operator new( std::size_t, void * const p_placeholder ) { /*BF_ASSUME( p_placeholder );*/ return p_placeholder; }
 
 #ifndef NDEBUG
 protected:
-     StreamBase() : ref_cnt_( 1 ) {}
-    ~StreamBase() { BOOST_ASSERT( ref_cnt_ == 1 ); }
+     stream_base() : ref_cnt_( 1 ) {}
+    ~stream_base() { BOOST_ASSERT( ref_cnt_ == 1 ); }
 #endif // NDEBUG
 
 protected:
@@ -162,7 +163,7 @@ private: // Dummy reference counting for stack based objects.
 #ifndef NDEBUG
     int ref_cnt_;
 #endif // NDEBUG
-};
+}; // class stream_base
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,7 +174,7 @@ private: // Dummy reference counting for stack based objects.
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Device>
-class __declspec( novtable ) device_stream_base : public StreamBase
+class __declspec( novtable ) device_stream_base : public stream_base
 {
 protected:
     device_stream_base( typename Device::handle_t const handle ) : handle_( handle ) {}
@@ -199,7 +200,7 @@ private:
 
 protected:
     typename Device::handle_t const handle_;
-};
+}; // class device_stream_base
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -213,7 +214,7 @@ template <class DeviceHandle>
 class input_device_stream : public device_stream_base<input_device<DeviceHandle> >
 {
 public:
-    input_device_stream( DeviceHandle const handle ) : device_stream_base( file ) {}
+    input_device_stream( DeviceHandle const handle ) : device_stream_base( handle ) {}
 
 private:
     HRESULT STDMETHODCALLTYPE Read( void * const pv, ULONG const cb, ULONG * const pcbRead ) override
@@ -224,7 +225,7 @@ private:
             *pcbRead = size_read;
         return ( size_read == cb ) ? S_OK : S_FALSE;
     }
-};
+}; // class input_device_stream
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -249,7 +250,7 @@ private:
             *pcbWritten = size_written;
         return ( size_written == cb ) ? S_OK : S_FALSE;
     }
-};
+}; // class output_device_stream
 
 #pragma warning( pop )
 
@@ -260,20 +261,26 @@ private:
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-struct __declspec( novtable ) istream_placeholder_helper : private StreamBase { void * handle; };
+struct __declspec( novtable ) istream_placeholder_helper : private stream_base { void * handle; };
 typedef aligned_storage<sizeof( istream_placeholder_helper ), sizeof( void *)> istream_placeholder;
 
 #ifdef NDEBUG
     BOOST_STATIC_ASSERT( sizeof( istream_placeholder ) <= sizeof( void * ) * 2 /* vtable + handle */ );
 #endif
 
-template <template <typename Handle> class IODeviceStream, class BackendWriter>
+template
+<
+	template <typename Handle> class IODeviceStream,
+	class BackendWriter
+>
 class device_stream_wrapper
     :
     private istream_placeholder,
     public  BackendWriter
 {
 public:
+	//...mrmlj...placement new construction to avoid requiring specializing the
+	//...mrmlj...entire class on the Handle parameter...
     template <class DeviceHandle>
     device_stream_wrapper( DeviceHandle const handle )
         :
@@ -293,7 +300,7 @@ public:
     {
         BOOST_STATIC_ASSERT( sizeof( IODeviceStream<DeviceHandle> ) <= sizeof( istream_placeholder ) );
     }
-};
+}; // class device_stream_wrapper
 
 //------------------------------------------------------------------------------
 } // namespace detail

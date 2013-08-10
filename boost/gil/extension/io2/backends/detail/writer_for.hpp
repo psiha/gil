@@ -3,9 +3,10 @@
 /// \file writer_for.hpp
 /// --------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -60,7 +61,7 @@ public:
         output_device<Target>( target                                                  ),
         Writer               ( output_device<Target>::transform( target ), file_format )
     {}
-};
+}; // class writer_extender
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -107,7 +108,7 @@ struct configure_on_write_writer
             BOOST_VERIFY( specified_format == OnlyFormat );
         }
     };
-};
+}; // struct configure_on_write_writer
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +152,7 @@ struct open_on_write_writer
         void write_default( WriterTarget const & target, format_tag const specified_format = OnlyFormat ) { BOOST_VERIFY( specified_format == OnlyFormat ); Writer::write_default( target ); }
         void write        ( WriterTarget const & target, format_tag const specified_format = OnlyFormat ) { BOOST_VERIFY( specified_format == OnlyFormat ); Writer::write        ( target ); }
     };
-};
+}; // struct open_on_write_writer
 
 //------------------------------------------------------------------------------
 } // namespace detail
@@ -196,7 +197,7 @@ public:
         typename backend_traits<Backend>::writer_view_data_t,
         default_format
     > type;
-};
+}; // struct writer_for
 
 //------------------------------------------------------------------------------
 } // namespace io

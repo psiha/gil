@@ -3,9 +3,10 @@
 /// \file c_file_name.hpp
 /// ---------------------
 ///
-/// Copyright (c) Domagoj Saric 2011.
+/// Copyright (c) Domagoj Saric 2011.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -30,12 +31,12 @@ namespace io
 {
 //------------------------------------------------------------------------------
 
-
 template <>
 struct device<char const *> : device<c_file_descriptor_t>
 {
     static bool const auto_closes = true;
 };
+
 
 template <>
 struct input_device<char const *>
@@ -56,7 +57,7 @@ struct input_device<char const *>
     input_device<c_file_descriptor_t>::handle_t transform( char const * /*p_file_name*/ ) const { return file_descriptor_; }
 
     input_device<c_file_descriptor_t>::handle_t const file_descriptor_;
-};
+}; // struct input_device<char const *>
 
 
 template <>
@@ -78,7 +79,7 @@ struct output_device<char const *>
     output_device<c_file_descriptor_t>::handle_t transform( char const * /*p_file_name*/ ) const { return file_descriptor_; }
 
     output_device<c_file_descriptor_t>::handle_t const file_descriptor_;
-};
+}; // struct output_device<char const *>
 
 //------------------------------------------------------------------------------
 } // namespace io

@@ -3,9 +3,10 @@
 /// \file c_file_descriptor.hpp
 /// ---------------------------
 ///
-/// Copyright (c) Domagoj Saric 2011.
+/// Copyright (c) 2011.-2013. Domagoj Saric
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -68,33 +69,33 @@ struct device<c_file_descriptor_t> : detail::device_base
 
     static uintmax_t position_long( handle_t const handle )
     {
-        #ifdef BOOST_MSVC
-            return /*std*/::_telli64( handle );
-        #else
-            return /*std*/::tell64  ( handle );
-        #endif // BOOST_MSVC
+    #ifdef BOOST_MSVC
+        return /*std*/::_telli64( handle );
+    #else
+        return /*std*/::tell64  ( handle );
+    #endif // BOOST_MSVC
     }
 
     static std::size_t size( handle_t const handle )
     {
-        #ifdef BOOST_MSVC
-            return /*std*/::_filelength( handle );
-        #else
-            struct stat file_status;
-            BOOST_VERIFY( ::fstat( handle, &file_status ) == 0 );
-            return file_status.st_size;
-        #endif // BOOST_MSVC
+    #ifdef BOOST_MSVC
+        return /*std*/::_filelength( handle );
+    #else
+        struct stat file_status;
+        BOOST_VERIFY( ::fstat( handle, &file_status ) == 0 );
+        return file_status.st_size;
+    #endif // BOOST_MSVC
     }
 
     static uintmax_t size_long( handle_t const handle )
     {
-        #ifdef BOOST_MSVC
-            return /*std*/::_filelengthi64( handle );
-        #else
-            struct stat64 file_status;
-            BOOST_VERIFY( ::fstat64( handle, &file_status ) == 0 );
-            return file_status.st_size;
-        #endif // BOOST_MSVC
+    #ifdef BOOST_MSVC
+        return /*std*/::_filelengthi64( handle );
+    #else
+        struct stat64 file_status;
+        BOOST_VERIFY( ::fstat64( handle, &file_status ) == 0 );
+        return file_status.st_size;
+    #endif // BOOST_MSVC
     }
 
     static bool seek( seek_origin const origin, off_t offset, handle_t const handle )
@@ -104,13 +105,13 @@ struct device<c_file_descriptor_t> : detail::device_base
 
     static bool seek_long( seek_origin const origin, intmax_t offset, handle_t const handle )
     {
-        #ifdef BOOST_MSVC
-            return /*std*/::_lseeki64( handle, offset, origin ) != 0;
-        #else
-            return /*std*/::lseeko   ( handle, offset, origin ) != 0;
-        #endif
+    #ifdef BOOST_MSVC
+        return /*std*/::_lseeki64( handle, offset, origin ) != 0;
+    #else
+        return /*std*/::lseeko   ( handle, offset, origin ) != 0;
+    #endif
     }
-};
+}; // struct device<c_file_descriptor_t>
 
 
 template <>
@@ -126,10 +127,10 @@ struct input_device<c_file_descriptor_t>
 
     static std::size_t read( void * p_data, std::size_t const size, handle_t const handle )
     {
-        int const result( /*std*/::read( handle, p_data, size ) );
+        std::size_t const result( /*std*/::read( handle, p_data, size ) );
         return ( result >= 0 ) ? result : 0;
     }
-};
+}; // struct input_device<c_file_descriptor_t>
 
 
 template <>
@@ -145,19 +146,19 @@ struct output_device<c_file_descriptor_t>
 
     static std::size_t write( void const * p_data, std::size_t const size, handle_t const handle )
     {
-        int const result( /*std*/::write( handle, p_data, size ) );
+        std::size_t const result( /*std*/::write( handle, p_data, size ) );
         return ( result >= 0 ) ? result : 0;
     }
 
     static void flush( handle_t const handle )
     {
-        #ifdef BOOST_MSVC
-            BOOST_VERIFY( /*std*/::_commit( handle ) == 0 );
-        #else
-            BOOST_VERIFY( /*std*/::fsync  ( handle ) == 0 );
-        #endif
+    #ifdef BOOST_MSVC
+        BOOST_VERIFY( /*std*/::_commit( handle ) == 0 );
+    #else
+        BOOST_VERIFY( /*std*/::fsync  ( handle ) == 0 );
+    #endif
     }
-};
+}; // struct output_device<c_file_descriptor_t>
 
 //------------------------------------------------------------------------------
 } // namespace io

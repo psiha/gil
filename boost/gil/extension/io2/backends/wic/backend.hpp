@@ -5,9 +5,10 @@
 ///
 /// Base IO interface WIC implementation.
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) 2010.-2013. Domagoj Saric
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -195,7 +196,7 @@ private:
 
 private:
     aligned_storage<sizeof( wic_roi ), alignment_of<wic_roi>::value>::type optional_roi_;
-};
+}; // struct wic_view_data_t
 
 
 template <template <typename Handle> class IODeviceStream, class BackendWriter>
@@ -250,7 +251,7 @@ struct backend_traits<wic_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-};
+}; // struct backend_traits<wic_image>
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -277,7 +278,7 @@ public:
 
 public: // Low-level (row, strip, tile) access
     static bool can_do_roi_access() { return true; }
-};
+}; // class wic_image
 
 //------------------------------------------------------------------------------
 } // namespace io

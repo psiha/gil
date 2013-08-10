@@ -5,7 +5,7 @@
 ///
 /// LibTIFF reader
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -71,6 +71,7 @@ void unmap( thandle_t /*handle*/, tdata_t /*base*/, toff_t /*size*/ )
 
 //------------------------------------------------------------------------------
 } // namespace detail
+//------------------------------------------------------------------------------
 
 
 class libtiff_image::native_reader
@@ -110,10 +111,10 @@ public: // Low-level (row, strip, tile) access
 
     std::size_t tile_size    () const { return ::TIFFTileSize   ( &lib_object() ); }
     std::size_t tile_row_size() const { return ::TIFFTileRowSize( &lib_object() ); }
-    point2<std::ptrdiff_t> tile_dimensions() const
+    point2<uint32> tile_dimensions() const
     {
         BOOST_ASSERT( can_do_tile_access() );
-        return point2<std::ptrdiff_t>
+        return point2<uint32>
         (
             get_field<uint32>( TIFFTAG_TILEWIDTH  ),
             get_field<uint32>( TIFFTAG_TILELENGTH )
@@ -203,7 +204,15 @@ private:
 
         full_format_t const result =
         {
-            LIBTIFF_FORMAT( samples_per_pixel, bits_per_sample, ( sample_format == SAMPLEFORMAT_VOID ) ? SAMPLEFORMAT_UINT : sample_format, planar_configuration, photometric, ink_set )
+            LIBTIFF_FORMAT
+			(
+				samples_per_pixel,
+				bits_per_sample,
+				( sample_format == SAMPLEFORMAT_VOID ) ? SAMPLEFORMAT_UINT : sample_format,
+				planar_configuration,
+				photometric,
+				ink_set
+			)
         };
         return result;
     }
@@ -229,7 +238,7 @@ private: // Private backend_base interface.
             : boost::noncopyable
         #endif // __GNUC__
     {
-        tile_setup_t( native_reader const & source, point2<std::ptrdiff_t> const & dimensions, offset_t const offset, bool const nptcc )
+        tile_setup_t( native_reader const & source, point2<uint32> const & dimensions, offset_t const offset, bool const nptcc )
             :
             tile_height                ( source.get_field<uint32>( TIFFTAG_TILELENGTH ) ),
             tile_width                 ( source.get_field<uint32>( TIFFTAG_TILEWIDTH  ) ),
@@ -289,7 +298,7 @@ private: // Private backend_base interface.
             unsigned int const modulo( dividend % divisor );
             return ( modulo != 0 ) ? modulo : divisor;
         }
-    };
+    }; // struct tile_setup_t
 
     struct skip_row_results_t
     {
@@ -843,7 +852,7 @@ private:
 
 private:
     full_format_t const format_;
-};
+}; // class libtiff_image::native_reader
 
 //------------------------------------------------------------------------------
 } // namespace io

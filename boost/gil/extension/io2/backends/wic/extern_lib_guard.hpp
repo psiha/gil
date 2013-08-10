@@ -5,18 +5,19 @@
 ///
 /// WIC extern lib guard
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
 /// For more information, see http://www.boost.org
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#pragma once
 #ifndef extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
 #define extern_lib_guard_hpp__A28436C0_3FEA_4850_9287_656BAAAD6259
+#pragma once
 //------------------------------------------------------------------------------
 #include "boost/gil/extension/io2/backends/detail/extern_lib_guard.hpp"
 #include "boost/gil/extension/io2/detail/io_error.hpp"
@@ -71,12 +72,12 @@ public:
     com_scoped_ptr( com_scoped_ptr const & source ) : baseCOMPtr_( source.baseCOMPtr_ ) { if ( baseCOMPtr_ ) baseCOMPtr_->AddRef(); }
     com_scoped_ptr( IUnknown & source )
     {
-        //http://msdn.microsoft.com/en-us/library/ms682521(v=vs.85).aspx
-        //http://blogs.msdn.com/b/oldnewthing/archive/2004/03/26/96777.aspx
-        //http://c2.com/cgi/wiki?QueryInterface
-        //http://msdn.microsoft.com/en-us/library/ms810016
-        //http://msdn.microsoft.com/en-us/library/dd542643(VS.85).aspx
-        //http://en.wikipedia.org/wiki/Catastrophic_failure
+        // http://msdn.microsoft.com/en-us/library/ms682521(v=vs.85).aspx
+        // http://blogs.msdn.com/b/oldnewthing/archive/2004/03/26/96777.aspx
+        // http://c2.com/cgi/wiki?QueryInterface
+        // http://msdn.microsoft.com/en-us/library/ms810016
+        // http://msdn.microsoft.com/en-us/library/dd542643(VS.85).aspx
+        // http://en.wikipedia.org/wiki/Catastrophic_failure
         BOOST_VERIFY
         (
             source.QueryInterface
@@ -116,7 +117,7 @@ public:
 
 private:
     COMInterface * baseCOMPtr_;
-};
+}; // class com_scoped_ptr
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,9 +140,24 @@ public:
     public:
         creator()
         {
+		#if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_ASSUME
+			BOOST_ASSERT_MSG( !wic_factory::p_imaging_factory_, "WIC already initialised." );
+		#endif
+
             HRESULT hr( ::CoInitializeEx( 0, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE | COINIT_SPEED_OVER_MEMORY ) );
             if ( SUCCEEDED( hr ) )
-                hr = wic_factory::p_imaging_factory_.create_instance( CLSID_WICImagingFactory );
+			{
+			#if BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_AUTO
+				if ( wic_factory::p_imaging_factory_ )
+				{
+					static_cast<IWICImagingFactory *>( wic_factory::p_imaging_factory_ )->AddRef();
+				}
+				else
+			#endif // BOOST_LIB_INIT( BOOST_GIL_EXTERNAL_LIB ) == BOOST_LIB_INIT_AUTO
+				{
+					hr = wic_factory::p_imaging_factory_.create_instance( CLSID_WICImagingFactory );
+				}
+			}
 
             if ( FAILED( hr ) )
                 io_error( "Boost.GIL failed to load external library." ); //...zzz...duplicated...
@@ -155,11 +171,11 @@ public:
             wic_factory::p_imaging_factory_.release();
             ::CoUninitialize();
         }
-    };
+    }; // class creator
 
 private:
     static com_scoped_ptr<IWICImagingFactory> p_imaging_factory_;
-};
+}; // class wic_factory
 
 // Implementation note:
 //   GCC supports the __declspec( selectany ) declarator for Windows targets

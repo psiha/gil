@@ -5,9 +5,10 @@
 ///
 /// WIC writer.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -69,6 +70,8 @@ public:
 
         if ( SUCCEEDED( hr ) )
         {
+			// http://msdn.microsoft.com/en-us/library/windows/desktop/ee719871(v=vs.85).aspx
+			// http://stackoverflow.com/questions/17711793/what-causes-iwicbitmapframeencodesetpixelformat-to-return-a-format-different-f
             WICPixelFormatGUID formatGUID( view_data.format_ );
             hr = frame().SetPixelFormat( &formatGUID );
             if ( SUCCEEDED( hr ) )
@@ -136,7 +139,7 @@ private:
     
 private:
     lib_object_t lib_object_;
-};
+}; // class wic_image::native_writer
 
 //------------------------------------------------------------------------------
 } // namespace io

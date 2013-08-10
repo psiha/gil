@@ -5,9 +5,10 @@
 ///
 /// LibTIFF backend.
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) 2010.-2013. Domagoj Saric
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -26,8 +27,12 @@
 #include "boost/gil/extension/io2/detail/platform_specifics.hpp"
 #include "boost/gil/extension/io2/detail/shared.hpp"
 
-#if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
-    #error libtiff support requires mpl vectors of size 35 or greater...
+#ifdef BOOST_MPL_LIMIT_VECTOR_SIZE
+	#if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
+		#error libtiff support requires mpl vectors of size 35 or greater...
+	#endif
+#else
+	#define BOOST_MPL_LIMIT_VECTOR_SIZE 40
 #endif
 
 #include <boost/array.hpp>
@@ -92,7 +97,7 @@ union full_format_t
 
     format_id       number;
     format_bitfield bits  ;
-};
+}; // union full_format_t
 
 
 template <typename Pixel, bool isPlanar>
@@ -118,7 +123,7 @@ struct gil_to_libtiff_format
             ( is_same<typename color_space_type<Pixel>::type, cmyk_t>::value ? INKSET_CMYK : 0 )
         )
     >
-{};
+{}; // struct gil_to_libtiff_format
 
 
 typedef mpl::vector35
@@ -184,7 +189,7 @@ inline int nop_close( thandle_t /*handle*/ )
 }
 
 template <typename Handle>
-toff_t size( thandle_t const fd )
+toff_t size( thandle_t const handle )
 {
     return static_cast<toff_t>( device<Handle>::size( reinterpret_cast<Handle>( handle ) ) );
 }
@@ -231,7 +236,7 @@ inline int memory_map_proc( thandle_t const handle, tdata_t * const pbase, toff_
 }
 
 
-#if defined(BOOST_MSVC)
+#if defined( BOOST_MSVC )
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
@@ -244,7 +249,7 @@ struct tiff_view_data_t
         dimensions_( view.dimensions()        ),
         stride_    ( view.pixels().row_size() ),
         offset_    ( offset                   )
-        #ifdef _DEBUG
+        #ifndef NDEBUG
             ,format_id_( gil_to_libtiff_format<typename View::value_type, is_planar<View>::value>::value )
         #endif
     {
@@ -257,13 +262,13 @@ struct tiff_view_data_t
         ignore_unused_variable_warning( format );
     }
 
-    point2<std::ptrdiff_t>         const & dimensions_      ;
+    point2<uint32>                 const & dimensions_      ;
     unsigned int                           stride_          ;
     unsigned int                           number_of_planes_;
     array<unsigned char *, 4>              plane_buffers_   ;
     generic_vertical_roi::offset_t         offset_          ;
 
-    #ifdef _DEBUG
+    #ifndef NDEBUG
         unsigned int format_id_;
     #endif
 
@@ -271,11 +276,12 @@ private: // this should probably go to the base backend class...
     template <class View>
     void set_buffers( View const & view, mpl::true_ /*is planar*/ )
     {
-        for ( number_of_planes_ = 0; number_of_planes_ < num_channels<View>::value; ++number_of_planes_ )
+        for ( unsigned int plane( 0 ); plane < num_channels<View>::value; ++plane )
         {
-            plane_buffers_[ number_of_planes_ ] = gil_reinterpret_cast<unsigned char *>( planar_view_get_raw_data( view, number_of_planes_ ) );
+            plane_buffers_[ plane ] = gil_reinterpret_cast<unsigned char *>( planar_view_get_raw_data( view, plane ) );
         }
-        BOOST_ASSERT( number_of_planes_ == num_channels<View>::value );
+        BOOST_ASSERT( plane == num_channels<View>::value );
+		number_of_planes_ = num_channels<View>::value;
     }
 
     template <class View>
@@ -292,6 +298,7 @@ struct tiff_writer_view_data_t;
 
 //------------------------------------------------------------------------------
 } // namespace detail
+//------------------------------------------------------------------------------
 
 class libtiff_image;
 
@@ -403,9 +410,9 @@ private:
     typedef detail::full_format_t full_format_t;
 
 public:
-    point2<std::ptrdiff_t> dimensions() const
+    point2<uint32> dimensions() const
     {
-        return point2<std::ptrdiff_t>( get_field<uint32>( TIFFTAG_IMAGEWIDTH ), get_field<uint32>( TIFFTAG_IMAGELENGTH ) );
+        return point2<uint32>( get_field<uint32>( TIFFTAG_IMAGEWIDTH ), get_field<uint32>( TIFFTAG_IMAGELENGTH ) );
     }
 
 protected:
@@ -429,9 +436,9 @@ protected:
     template <typename T1, typename T2>
     std::pair<T1, T2> get_field( ttag_t const tag, int & cumulative_result ) const
     {
-        std::pair<T1, T2> value;
-        cumulative_result &= ::TIFFGetFieldDefaulted( &lib_object(), tag, &value.first, &value.second );
-        return value;
+		T1 first; T2 second; // avoid the std::pair default constructor
+        cumulative_result &= ::TIFFGetFieldDefaulted( &lib_object(), tag, &first, &second );
+        return std::pair<T1, T2>( first, second );
     }
 
     static std::size_t cached_format_size( backend_traits<libtiff_image>::format_t const format )

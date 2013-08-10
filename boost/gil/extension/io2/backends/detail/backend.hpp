@@ -5,9 +5,10 @@
 ///
 /// Base CRTP class for all image implementation classes/backends.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -180,7 +181,7 @@ protected:
             return result_type();
         }
     };
-};
+}; // class backend_base
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -197,7 +198,7 @@ public:
 
     typedef typename backend_traits<Impl>::supported_pixel_formats_t supported_pixel_formats;
     typedef typename backend_traits<Impl>::roi_t                     roi;
-    typedef typename roi::offset_t                                           offset_t;
+    typedef typename roi::offset_t                                   offset_t;
 
     template <typename PixelType, bool IsPlanar>
     struct native_format
@@ -218,6 +219,14 @@ public:
     template <typename Source> struct reader_for : gil::io::reader_for<Impl, Source> {};
     template <typename Target> struct writer_for : gil::io::writer_for<Impl, Target> {};
 
+#ifdef DOXYGEN_ONLY
+	class native_reader;
+	class device_reader;
+
+	class native_writer;
+	class device_writer;
+#endif // DOXYGEN_ONLY
+
     BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<typename roi::offset_t, typename roi::point_t>::value) );
 
 protected:
@@ -229,8 +238,7 @@ private:
     // MSVC++ 10 generates code to check whether this == 0.
     Impl       & impl()       { BF_ASSUME( this != 0 ); return static_cast<Impl       &>( *this ); }
     Impl const & impl() const { BF_ASSUME( this != 0 ); return static_cast<Impl const &>( *this ); }
-};
-
+}; // class backend
 
 //------------------------------------------------------------------------------
 } // namespace detail

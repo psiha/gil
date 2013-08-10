@@ -3,9 +3,10 @@
 /// \file reader_for.hpp
 /// --------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -66,14 +67,19 @@ struct backend_traits;
 template <class Backend, typename Source>
 struct reader_for
 {
-    typedef typename mpl::has_key<typename backend_traits<Backend>::native_sources, Source>::type supported_by_native_reader_t;
+    typedef typename
+		mpl::has_key
+		<
+			typename backend_traits<Backend>::native_sources,
+			Source
+		>::type supported_by_native_reader_t;
 
-    // The backend does not seem to provide a reader for the specified target...
-    BOOST_STATIC_ASSERT
-    ((
+    BOOST_STATIC_ASSERT_MSG
+    (
         supported_by_native_reader_t::value ||
-        !unknown_device<Source>     ::value
-    ));
+        !unknown_device<Source>     ::value,
+		"Backend does not provide a reader for the specified target."
+    );
 
     typedef typename mpl::if_
     <
@@ -81,7 +87,7 @@ struct reader_for
                                 typename Backend::native_reader,
         detail::reader_extender<typename Backend::device_reader, Source>
     >::type type;
-};
+}; // struct reader_for
 
 
 template <class Backend>
