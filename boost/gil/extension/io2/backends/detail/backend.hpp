@@ -42,6 +42,7 @@
 #include <boost/static_assert.hpp>
 #include <boost/type_traits/decay.hpp>
 #include <boost/type_traits/is_unsigned.hpp>
+#include <boost/noncopyable.hpp>
 //------------------------------------------------------------------------------
 namespace boost
 {
