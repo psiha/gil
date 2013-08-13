@@ -7,7 +7,8 @@
 ///
 /// Copyright (c) Domagoj Saric 2010.-2013.
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -89,15 +90,8 @@ public: /// \ingroup Construction
     template <typename DeviceHandle>
     explicit native_reader( DeviceHandle const handle )
         :
-        libtiff_image
-        (
-            handle,
-            &input_device<DeviceHandle>::read,
-            NULL,
-            NULL,
-            NULL
-        ),
-        format_( get_format() )
+        libtiff_image( handle, &input_device<DeviceHandle>::read, NULL, NULL, NULL ),
+        format_      ( get_format()                                                )
     {}
 
 public:
@@ -135,16 +129,16 @@ public: // Low-level (row, strip, tile) access
         sequential_row_read_state() : position_( 0 ) {}
 
         unsigned int position_;
-    };
+    }; // class sequential_row_read_state
 
 
     static sequential_row_read_state begin_sequential_row_read() { return sequential_row_read_state(); }
 
-    void read_row( sequential_row_read_state & state, unsigned char * const p_row_storage, unsigned int const plane = 0 ) const
+    void read_row( sequential_row_read_state & state, void * const p_row_storage, tsample_t const plane = 0 ) const
     {
         state.accumulate_greater
         (
-            ::TIFFReadScanline( &lib_object(), p_row_storage, state.position_++, static_cast<tsample_t>( plane ) ),
+            ::TIFFReadScanline( &lib_object(), p_row_storage, state.position_++, plane ),
             0
         );
     }
@@ -154,7 +148,7 @@ public: // Low-level (row, strip, tile) access
 
     static sequential_tile_read_state begin_sequential_tile_access() { return begin_sequential_row_read(); }
 
-    void read_tile( sequential_row_read_state & state, unsigned char * const p_tile_storage ) const
+    void read_tile( sequential_row_read_state & state, void * const p_tile_storage ) const
     {
         state.accumulate_greater
         (
@@ -244,20 +238,20 @@ private: // Private backend_base interface.
             tile_width                 ( source.get_field<uint32>( TIFFTAG_TILEWIDTH  ) ),
             row_tiles                  ( source.get_field<uint32>( TIFFTAG_IMAGEWIDTH ) / tile_width ),
             size_of_pixel              ( ( source.format_bits().planar_configuration == PLANARCONFIG_CONTIG ? source.format_bits().samples_per_pixel : 1 ) * source.format_bits().bits_per_sample / 8 ),
-            tile_width_bytes           ( tile_width * size_of_pixel ),
-            tile_size_bytes            ( tile_width_bytes * tile_height ),
+            tile_width_bytes           ( tile_width       * size_of_pixel ),
+            tile_size_bytes            ( tile_width_bytes * tile_height   ),
             p_tile_buffer              ( new unsigned char[ tile_size_bytes * ( nptcc ? source.format_bits().samples_per_pixel : 1 ) ] ),
             last_row_tile_width        ( modulo_unless_zero( dimensions.x, tile_width ) /*dimensions.x % tile_width*/ ),
             tiles_per_row              ( ( dimensions.x / tile_width ) + /*( last_row_tile_width != 0 )*/ ( ( dimensions.x % tile_width ) != 0 ) ),
-            last_row_tile_width_bytes  ( last_row_tile_width * size_of_pixel ),
-            last_row_tile_size_bytes   ( last_row_tile_width_bytes * tile_height  ),
-            current_row_tiles_remaining( tiles_per_row ),
-            starting_tile              ( offset / tile_height * tiles_per_row ),
-            rows_to_skip               ( offset % tile_height ),
+            last_row_tile_width_bytes  ( last_row_tile_width       * size_of_pixel ),
+            last_row_tile_size_bytes   ( last_row_tile_width_bytes * tile_height   ),
+            current_row_tiles_remaining( tiles_per_row                             ),
+            starting_tile              ( offset / tile_height * tiles_per_row      ),
+            rows_to_skip               ( offset % tile_height                      ),
             number_of_tiles            ( round_up_divide( dimensions.y, tile_height ) * tiles_per_row * ( source.format_bits().planar_configuration == PLANARCONFIG_SEPARATE ? source.format_bits().samples_per_pixel : 1 ) )
         {
-            BOOST_ASSERT( static_cast<tsize_t>( tile_width_bytes ) == ::TIFFTileRowSize( &source.lib_object() ) );
-            BOOST_ASSERT( static_cast<tsize_t>( tile_size_bytes  ) == ::TIFFTileSize   ( &source.lib_object() ) );
+            BOOST_ASSERT( tile_width_bytes == unsigned( ::TIFFTileRowSize( &source.lib_object() ) ) );
+            BOOST_ASSERT( tile_size_bytes  == unsigned( ::TIFFTileSize   ( &source.lib_object() ) ) );
             BOOST_ASSERT( starting_tile + number_of_tiles <= ::TIFFNumberOfTiles( &source.lib_object() ) );
             if ( tile_height > static_cast<uint32>( dimensions.y ) )
             {
@@ -276,8 +270,8 @@ private: // Private backend_base interface.
         uint32 const row_tiles  ;
 
         unsigned int const size_of_pixel   ;
-        size_t       const tile_width_bytes;
-        tsize_t      const tile_size_bytes ;
+        unsigned int const tile_width_bytes;
+        unsigned int const tile_size_bytes ;
 
         scoped_array<unsigned char> p_tile_buffer;
 
@@ -311,7 +305,7 @@ private: // Private backend_base interface.
     {
         cumulative_result result;
 
-        if ( can_do_tile_access() )
+        if ( can_do_tile_access() ) /* tiled decoding */
         {
             tile_setup_t setup( *this, view_data.dimensions_, view_data.offset_, false );
 
@@ -325,7 +319,18 @@ private: // Private backend_base interface.
                     bool         const last_row_tile        ( !--setup.current_row_tiles_remaining                                     );
                     unsigned int const this_tile_width_bytes( last_row_tile ? setup.last_row_tile_width_bytes : setup.tile_width_bytes );
 
-                    result.accumulate_equal( ::TIFFReadEncodedTile( &lib_object(), current_tile, setup.p_tile_buffer.get(), setup.tile_size_bytes ), setup.tile_size_bytes );
+                    result.accumulate_equal
+					(
+						::TIFFReadEncodedTile
+						(
+							&lib_object(),
+							current_tile,
+							setup.p_tile_buffer.get(),
+							setup.tile_size_bytes
+						),
+						setup.tile_size_bytes
+					);
+
                     unsigned char const * p_tile_buffer_location( setup.p_tile_buffer.get() + ( setup.rows_to_skip * this_tile_width_bytes ) );
                     unsigned char       * p_target_local        ( p_target                                                                   );
                     for ( unsigned int row( setup.rows_to_skip ); row < setup.rows_to_read_per_tile; ++row )
@@ -350,7 +355,7 @@ private: // Private backend_base interface.
                 BOOST_ASSERT( p_target == view_data.plane_buffers_[ plane ] + ( view_data.stride_ * view_data.dimensions_.y ) );
             }
         }
-        else
+        else /* row per row decoding */
         {
             BOOST_ASSERT( ::TIFFScanlineSize( &lib_object() ) <= static_cast<tsize_t>( view_data.stride_ ) );
             for ( unsigned int plane( 0 ); plane < view_data.number_of_planes_; ++plane )

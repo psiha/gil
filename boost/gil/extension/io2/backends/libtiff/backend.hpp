@@ -276,12 +276,11 @@ private: // this should probably go to the base backend class...
     template <class View>
     void set_buffers( View const & view, mpl::true_ /*is planar*/ )
     {
+		number_of_planes_ = num_channels<View>::value;
         for ( unsigned int plane( 0 ); plane < num_channels<View>::value; ++plane )
         {
             plane_buffers_[ plane ] = gil_reinterpret_cast<unsigned char *>( planar_view_get_raw_data( view, plane ) );
         }
-        BOOST_ASSERT( plane == num_channels<View>::value );
-		number_of_planes_ = num_channels<View>::value;
     }
 
     template <class View>
@@ -292,7 +291,7 @@ private: // this should probably go to the base backend class...
     }
 
     void operator=( tiff_view_data_t const & );
-};
+}; // struct tiff_view_data_t
 
 struct tiff_writer_view_data_t;
 
@@ -338,7 +337,7 @@ struct backend_traits<libtiff_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = false            );
-};
+}; // struct backend_traits<libtiff_image>
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -424,12 +423,12 @@ protected:
         // them when possible.
         //                                    (20.07.2011.) (Domagoj Saric)
         T value;
-        #ifdef _MSC_VER
-            T * p_value( &value );
-            BOOST_VERIFY( ::TIFFVGetFieldDefaulted( &lib_object(), tag, reinterpret_cast<va_list>( &p_value ) ) );
-        #else
-            BOOST_VERIFY( ::TIFFGetFieldDefaulted ( &lib_object(), tag,                             &value    ) );
-        #endif // _MSC_VER
+    #ifdef _MSC_VER
+        T * p_value( &value );
+        BOOST_VERIFY( ::TIFFVGetFieldDefaulted( &lib_object(), tag, reinterpret_cast<va_list>( &p_value ) ) );
+    #else
+        BOOST_VERIFY( ::TIFFGetFieldDefaulted ( &lib_object(), tag,                             &value    ) );
+    #endif // _MSC_VER
         return value;
     }
 
@@ -437,7 +436,12 @@ protected:
     std::pair<T1, T2> get_field( ttag_t const tag, int & cumulative_result ) const
     {
 		T1 first; T2 second; // avoid the std::pair default constructor
-        cumulative_result &= ::TIFFGetFieldDefaulted( &lib_object(), tag, &first, &second );
+	#ifdef _MSC_VER
+		void * values[ 2 ] = { &first, &second };
+        cumulative_result &= ::TIFFVGetFieldDefaulted( &lib_object(), tag, reinterpret_cast<va_list>( &values ) );
+    #else
+        cumulative_result &= ::TIFFGetFieldDefaulted ( &lib_object(), tag, &first, &second );
+    #endif // _MSC_VER
         return std::pair<T1, T2>( first, second );
     }
 
@@ -462,9 +466,9 @@ private:
 
 private:
     TIFF * const p_tiff_;
-};
+}; // class libtiff_image
 
-#if defined(BOOST_MSVC)
+#if defined( BOOST_MSVC )
 #   pragma warning( pop )
 #endif
 
