@@ -88,7 +88,12 @@ template <> struct gil_to_wic_format<gray16_pixel_t    , false> : format_guid<GU
 template <> struct gil_to_wic_format<bgr16_pixel_t     , false> : format_guid<GUID_WICPixelFormat48bppRGB   > {};
 template <> struct gil_to_wic_format<bgra16_pixel_t    , false> : format_guid<GUID_WICPixelFormat64bppBGRA  > {};
 template <> struct gil_to_wic_format<cmyk8_pixel_t     , false> : format_guid<GUID_WICPixelFormat32bppCMYK  > {};
-
+#if ( _WIN32_WINNT >= _WIN32_WINNT_VISTA )
+template <> struct gil_to_wic_format<rgba8_pixel_t     , false> : format_guid<GUID_WICPixelFormat32bppRGBA  > {};
+#endif
+#if ( _WIN32_WINNT >= _WIN32_WINNT_WIN8 ) || defined( _WIN7_PLATFORM_UPDATE )
+template <> struct gil_to_wic_format<rgb16_pixel_t     , false> : format_guid<GUID_WICPixelFormat64bppRGB   > {};
+#endif
 
 typedef mpl::vector8
 <
@@ -118,6 +123,8 @@ public:
 
     typedef point_t            offset_t  ;
 
+	static bool const one_dimensional = false;
+
 public:
     wic_roi( value_type const x, value_type const y, value_type const width, value_type const height )
     {
@@ -125,19 +132,19 @@ public:
         Width = width; Height = height;
     }
 
-    wic_roi( offset_t const top_left, value_type const width, value_type const height )
+    wic_roi( offset_t const & top_left, value_type const width, value_type const height )
     {
         X = top_left.x; Y = top_left.y;
         Width = width; Height = height;
     }
 
-    wic_roi( offset_t const top_left, offset_t const bottom_right )
+    wic_roi( offset_t const & top_left, offset_t const bottom_right )
     {
         X = top_left.x; Y = top_left.y;
         Width  = bottom_right.x - top_left.x;
         Height = bottom_right.y - top_left.y;
     }
-};
+}; // class wic_roi
 
 
 inline void ensure_result( HRESULT const result )
@@ -156,7 +163,7 @@ struct wic_view_data_t
     template <typename View>
     wic_view_data_t( View const & view )
         :
-        p_roi_ ( 0                                                                           ),
+        p_roi_ ( NULL                                                                        ),
         format_( gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value )
     {
         set_bitmapdata_for_view( view );
@@ -165,11 +172,11 @@ struct wic_view_data_t
     template <typename View>
     wic_view_data_t( View const & view, wic_roi::offset_t const & offset )
         :
-        p_roi_ ( static_cast<wic_roi const *>( optional_roi_.address() )                     ),
-        format_( gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value )
+        p_roi_ ( new ( optional_roi_.address() ) wic_roi( offset, view.width(), view.height() ) ),
+        format_( gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value    )
     {
+		//BF_ASSUME( p_roi_ );
         set_bitmapdata_for_view( view );
-        new ( optional_roi_.address() ) wic_roi( offset, width_, height_ );
     }
 
     WICRect      const * const p_roi_ ;
