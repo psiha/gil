@@ -5,9 +5,10 @@
 ///
 /// Base IO interface GDI+ implementation.
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) 2010.-2013. Domagoj Saric
 ///
-///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
+///  Use, modification and distribution is subject to the
+///  Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
 ///  http://www.boost.org/LICENSE_1_0.txt)
 ///
@@ -23,7 +24,7 @@
 #include "detail/gp_extern_lib_guard.hpp"
 #include "detail/windows_shared.hpp"
 #include "detail/windows_shared_istreams.hpp"
-#include "formatted_image.hpp"
+#include "backend.hpp"
 
 #include <boost/array.hpp>
 #include <boost/mpl/eval_if.hpp>
@@ -191,7 +192,7 @@ public:
                 view.height(),
                 view.pixels().row_size(),
                 gil_to_gp_format<typename View::value_type, is_planar<View>::value>::value,
-                formatted_image_base::get_raw_data( view ),
+                backend_base::get_raw_data( view ),
                 &lib_object().first
             )
         );
@@ -261,7 +262,7 @@ class gp_view_base;
 class gp_image;
 
 template <>
-struct formatted_image_traits<gp_image>
+struct backend_traits<gp_image>
 {
     typedef Gdiplus::PixelFormat format_t;
 
@@ -284,8 +285,8 @@ struct formatted_image_traits<gp_image>
         mpl::pair<wchar_t        const *,                                           gp_image  >,
         mpl::pair<IStream               ,                                           gp_image  >,
         mpl::pair<FILE                  , detail::input_FILE_for_IStream_extender  <gp_image> >,
-        mpl::pair<memory_chunk_t        , detail::memory_chunk_for_IStream_extender<gp_image> >
-    > readers;
+        mpl::pair<memory_range_t        , detail::memory_chunk_for_IStream_extender<gp_image> >
+    > native_sources;
 
     typedef mpl::map4
     <
@@ -293,7 +294,7 @@ struct formatted_image_traits<gp_image>
         mpl::pair<wchar_t const *, detail::gp_writer>,
         mpl::pair<IStream        , detail::gp_writer>,
         mpl::pair<FILE           , detail::gp_writer>
-    > writers;
+    > native_sinks;
 
     typedef mpl::vector5_c<format_tag, bmp, gif, jpeg, png, tiff> supported_image_formats;
 
@@ -329,7 +330,7 @@ struct formatted_image_traits<gp_image>
             Height      = view.height();
             Stride      = view.pixels().row_size();
             PixelFormat = detail::gil_to_gp_format<typename View::value_type, is_planar<View>::value>::value;
-            Scan0       = formatted_image_base::get_raw_data( view );
+            Scan0       = backend_base::get_raw_data( view );
             Reserved    = 0;
         }
 
@@ -354,7 +355,7 @@ struct formatted_image_traits<gp_image>
 class gp_image
     :
     private detail::gp_guard,
-    public  detail::formatted_image<gp_image>
+    public  detail::backend<gp_image>
 {
 public:
     typedef detail::gp_user_guard guard;
@@ -468,7 +469,7 @@ public:
 public: // Low-level (row, strip, tile) access
     static bool can_do_roi_access() { return true; }
 
-    class sequential_row_access_state
+    class sequential_row_read_state
         :
         private detail::cumulative_result
     {
@@ -479,7 +480,7 @@ public: // Low-level (row, strip, tile) access
         BOOST_STATIC_CONSTANT( bool, throws_on_error = false );
 
     private:
-        sequential_row_access_state( gp_image const & source_image )
+        sequential_row_read_state( gp_image const & source_image )
             :
             roi_( 0, 0, source_image.dimensions().x, 1 )
         {
@@ -495,11 +496,11 @@ public: // Low-level (row, strip, tile) access
         Gdiplus::BitmapData bitmapData_;
     };
 
-    sequential_row_access_state begin_sequential_row_access() const { return sequential_row_access_state( *this ); }
+    sequential_row_read_state begin_sequential_row_read() const { return sequential_row_read_state( *this ); }
 
     /// \todo Kill duplication with raw_convert_to_prepared_view().
     ///                                       (04.01.2011.) (Domagoj Saric)
-    void read_row( sequential_row_access_state & state, unsigned char * const p_row_storage ) const
+    void read_row( sequential_row_read_state & state, unsigned char * const p_row_storage ) const
     {
         using namespace detail ;
         using namespace Gdiplus;
@@ -526,7 +527,7 @@ public: // Low-level (row, strip, tile) access
     ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
     ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
 
-private: // Private formatted_image_base interface.
+private: // Private backend_base interface.
     friend class base_t;
 
     template <class MyView, class TargetView, class Converter>
@@ -770,8 +771,8 @@ public:
 //...mhmh...to be implemented...
 //template <class Impl, class SupportedPixelFormats, class ROI>
 //inline
-//typename formatted_image<Impl, SupportedPixelFormats, ROI>::view_t
-//view( formatted_image<Impl, SupportedPixelFormats, ROI> & img );// { return img._view; }
+//typename backend<Impl, SupportedPixelFormats, ROI>::view_t
+//view( backend<Impl, SupportedPixelFormats, ROI> & img );// { return img._view; }
 
 //------------------------------------------------------------------------------
 } // namespace detail

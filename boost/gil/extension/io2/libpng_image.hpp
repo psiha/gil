@@ -13,11 +13,11 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
-#pragma once
 #ifndef libpng_image_hpp__9E0C99E6_EAE8_4D71_844B_93518FFCB5CE
 #define libpng_image_hpp__9E0C99E6_EAE8_4D71_844B_93518FFCB5CE
+#pragma once
 //------------------------------------------------------------------------------
-#include "formatted_image.hpp"
+#include "backend.hpp"
 #include "detail/platform_specifics.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
@@ -43,7 +43,7 @@ namespace detail
 //------------------------------------------------------------------------------
 
 template <typename Pixel, bool isPlanar>
-struct gil_to_libpng_format : mpl::integral_c<unsigned int, formatted_image_base::unsupported_format> {};
+struct gil_to_libpng_format : mpl::integral_c<unsigned int, backend_base::unsupported_format> {};
 
 /// \todo Add bgr-layout formats as LibPNG actually supports them through
 /// png_set_bgr().
@@ -85,7 +85,7 @@ struct libpng_view_data_t
     /*explicit*/ libpng_view_data_t( View const & view, libpng_roi::offset_t const offset = 0 )
         :
         format_( gil_to_libpng_format<typename View::value_type, is_planar<View>::value>::value ),
-        buffer_( formatted_image_base::get_raw_data( view ) ),
+        buffer_( backend_base::get_raw_data( view ) ),
         offset_( offset                   ),
         height_( view.height()            ),
         width_ ( view.width ()            ),
@@ -250,8 +250,6 @@ protected:
 ///
 /// \class libpng_writer
 ///
-/// \brief
-///
 ////////////////////////////////////////////////////////////////////////////////
 
 class libpng_writer
@@ -280,7 +278,7 @@ public:
         write( view );
     }
 
-    void write( libpng_view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
+    void write( libpng_view_data_t const & view ) BOOST_GIL_CAN_THROW
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
@@ -382,7 +380,7 @@ private:
 class libpng_image;
 
 template <>
-struct formatted_image_traits<libpng_image>
+struct backend_traits<libpng_image>
 {
     typedef detail::libpng_supported_pixel_formats supported_pixel_formats_t;
     typedef detail::libpng_roi                     roi_t;
@@ -400,16 +398,16 @@ struct formatted_image_traits<libpng_image>
 
     typedef mpl::map3
             <
-                mpl::pair<memory_chunk_t        , detail::seekable_input_memory_range_extender<libpng_image> >,
+                mpl::pair<memory_range_t        , detail::seekable_input_memory_range_extender<libpng_image> >,
                 mpl::pair<FILE                  ,                                              libpng_image  >,
                 mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libpng_image> >
-            > readers;
+            > native_sources;
 
     typedef mpl::map2
             <
                 mpl::pair<FILE        ,                                          detail::libpng_writer_FILE  >,
                 mpl::pair<char const *, detail::output_c_str_for_c_file_extender<detail::libpng_writer_FILE> >
-            > writers;
+            > native_sinks;
 
     typedef mpl::vector1_c<format_tag, png> supported_image_formats;
 
@@ -430,7 +428,7 @@ struct formatted_image_traits<libpng_image>
 
 class libpng_image
     :
-    public  detail::formatted_image<libpng_image>,
+    public  detail::backend<libpng_image>,
     private detail::libpng_base
 {
 public:
@@ -450,8 +448,8 @@ public:
         {
             default: return current_format;
 
-            case PNG_COLOR_TYPE_PALETTE   : return PNG_COLOR_TYPE_RGB  | ( 8 << 16 );
-            case PNG_COLOR_TYPE_GRAY_ALPHA: return PNG_COLOR_TYPE_RGBA | ( ( ( current_format >> 16 ) & 0xFF ) << 16 );
+            case PNG_COLOR_TYPE_PALETTE   : return PNG_COLOR_TYPE_RGB  | ( 8 << 16 ); // 8-bit RGB
+            case PNG_COLOR_TYPE_GRAY_ALPHA: return PNG_COLOR_TYPE_RGBA | ( ( ( current_format >> 16 ) & 0xFF ) << 16 ); // (bits of current_format) RGBA
         }
     }
 
@@ -498,7 +496,7 @@ public: /// \ingroup Construction
         init();
     }
 
-    explicit libpng_image( memory_chunk_t & in_memory_image )
+    explicit libpng_image( memory_range_t & in_memory_image )
         :
         libpng_base( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
     {
@@ -526,20 +524,20 @@ public:
     }
 
 public: // Low-level (row, strip, tile) access
-    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
+    void read_row( sequential_row_read_state, unsigned char * const p_row_storage ) const
     {
         read_row( p_row_storage );
     }
 
     png_struct & lib_object() const { return png_object(); }
 
-private: // Private formatted_image_base interface.
+private: // Private backend_base interface.
     // Implementation note:
     //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
     // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
     // neither.
     //                                        (13.01.2011.) (Domagoj Saric)
-    friend class detail::formatted_image<libpng_image>;
+    friend class detail::backend<libpng_image>;
 
     template <class MyView, class TargetView, class Converter>
     void generic_convert_to_prepared_view( TargetView const & view, Converter const & converter ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
@@ -598,17 +596,19 @@ private: // Private formatted_image_base interface.
             ::png_set_palette_to_rgb( &png_object() );
         }
         else
-        if ( colour_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8 )
+        if ( ( colour_type == PNG_COLOR_TYPE_GRAY ) && ( bit_depth < 8 ) )
+        {
             ::png_set_expand_gray_1_2_4_to_8( &png_object() );
+        }
+
+        if ( !( colour_type & PNG_COLOR_MASK_ALPHA ) )
+            ::png_set_strip_alpha( &png_object() );
 
         if ( ::png_get_valid( &png_object(), &info_object(), PNG_INFO_tRNS ) )
             ::png_set_tRNS_to_alpha( &png_object() );
 
         if ( bit_depth == 8 )
             ::png_set_strip_16( &png_object() );
-
-        if ( !( colour_type & PNG_COLOR_MASK_ALPHA ) )
-            ::png_set_strip_alpha( &png_object() );
 
         //...zzz...
 
@@ -738,7 +738,7 @@ private:
         BOOST_ASSERT( png_ptr         );
         BOOST_ASSERT( png_ptr->io_ptr );
 
-        memory_chunk_t & memory_chunk( *static_cast<memory_chunk_t *>( png_ptr->io_ptr ) );
+        memory_range_t & memory_chunk( *static_cast<memory_range_t *>( png_ptr->io_ptr ) );
 
         if ( length <= static_cast<std::size_t>( memory_chunk.size() ) )
         {

@@ -17,7 +17,7 @@
 #ifndef libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 #define libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 //------------------------------------------------------------------------------
-#include "formatted_image.hpp"
+#include "backend.hpp"
 #include "detail/io_error.hpp"
 #include "detail/libx_shared.hpp"
 #include "detail/shared.hpp"
@@ -221,7 +221,7 @@ struct view_data_t : decompression_setup_data_t
         decompression_setup_data_t
         (
             gil_to_libjpeg_format<typename View::value_type, is_planar<View>::value>::value,
-            formatted_image_base::get_raw_data( view ),
+            backend_base::get_raw_data( view ),
             offset
         ),
         height_( view.height()            ),
@@ -246,6 +246,9 @@ class libjpeg_writer
     private libjpeg_base,
     public  configure_on_write_writer
 {
+protected:
+    BOOST_STATIC_CONSTANT( bool, auto_closes_device = true );
+
 public:
     explicit libjpeg_writer( char const * const p_target_file_name )
         :
@@ -298,7 +301,7 @@ private:
         compressor().in_color_space   = view.format_;
     }
 
-    void do_write( view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
+    void do_write( view_data_t const & view ) BOOST_GIL_CAN_THROW
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
@@ -460,7 +463,7 @@ private:
 class libjpeg_image;
 
 template <>
-struct formatted_image_traits<libjpeg_image>
+struct backend_traits<libjpeg_image>
 {
     typedef       ::J_COLOR_SPACE                   format_t;
     typedef detail::libjpeg_supported_pixel_formats supported_pixel_formats_t;
@@ -478,16 +481,16 @@ struct formatted_image_traits<libjpeg_image>
 
     typedef mpl::map3
             <
-                mpl::pair<memory_chunk_t        , detail::seekable_input_memory_range_extender<libjpeg_image> >,
+                mpl::pair<memory_range_t        , detail::seekable_input_memory_range_extender<libjpeg_image> >,
                 mpl::pair<FILE                  ,                                              libjpeg_image  >,
                 mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libjpeg_image> >
-            > readers;
+            > native_sources;
 
     typedef mpl::map2
             <
                 mpl::pair<FILE        , detail::libjpeg_writer>,
                 mpl::pair<char const *, detail::libjpeg_writer>
-            > writers;
+            > native_sinks;
 
     typedef mpl::vector1_c<format_tag, jpeg> supported_image_formats;
 
@@ -507,7 +510,7 @@ struct formatted_image_traits<libjpeg_image>
 class libjpeg_image
     :
     public detail::libjpeg_base,
-    public detail::formatted_image<libjpeg_image>
+    public detail::backend<libjpeg_image>
 {
 public:
     struct guard {};
@@ -575,7 +578,7 @@ public:
     }
 
 public: // Low-level (row, strip, tile) access
-    void read_row( sequential_row_access_state, unsigned char * const p_row_storage ) const
+    void read_row( sequential_row_read_state, unsigned char * const p_row_storage ) const
     {
         read_scanline( p_row_storage );
     }
@@ -584,7 +587,7 @@ public: // Low-level (row, strip, tile) access
     jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
 
 public: /// \ingroup Construction
-    explicit libjpeg_image( memory_chunk_t & memory_chunk )
+    explicit libjpeg_image( memory_range_t & memory_chunk )
         :
         libjpeg_base( for_decompressor() )
     {
@@ -612,15 +615,15 @@ public: /// \ingroup Construction
         read_header();
     }
 
-private: // Private interface for the base formatted_image<> class.
+private: // Private interface for the base backend<> class.
     // Implementation note:
     //   MSVC 10 accepts friend base_t and friend class base_t, Clang 2.8
     // accepts friend class base_t, Apple Clang 1.6 and GCC (4.2 and 4.6) accept
     // neither.
     //                                        (13.01.2011.) (Domagoj Saric)
-    friend class detail::formatted_image<libjpeg_image>;
+    friend class detail::backend<libjpeg_image>;
 
-    void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
+    void raw_convert_to_prepared_view( detail::view_data_t const & view_data ) const BOOST_GIL_CAN_THROW
     {
         setup_decompression( view_data );
 
@@ -721,7 +724,7 @@ private: // Private interface for the base formatted_image<> class.
     }
 
 
-    static std::size_t cached_format_size( format_t const format )
+    static unsigned int cached_format_size( format_t const format )
     {
         switch ( format )
         {
@@ -742,7 +745,7 @@ private: // Private interface for the base formatted_image<> class.
     }
 
 private:
-    void setup_decompression( detail::decompression_setup_data_t const & view_data ) const BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
+    void setup_decompression( detail::decompression_setup_data_t const & view_data ) const BOOST_GIL_CAN_THROW
     {
         unsigned int const state       ( decompressor().global_state );
         unsigned int       rows_to_skip( view_data.offset_           );
@@ -786,9 +789,9 @@ private:
         mutable_this().decompressor().raw_data_out = true;
         mutable_this().decompressor().global_state = DSTATE_RAW_OK;
 
-        std::size_t const max_number_of_components( 4 ); // CMYK
-        std::size_t const max_sampling_factor     ( 2 ); // Documentation
-        std::size_t const mcu_row_size            ( max_sampling_factor * DCTSIZE ); // Documentation
+        unsigned int const max_number_of_components( 4 ); // CMYK
+        unsigned int const max_sampling_factor     ( 2 ); // Documentation
+        unsigned int const mcu_row_size            ( max_sampling_factor * DCTSIZE ); // Documentation
         BOOST_ASSERT( decompressor().num_components    <= max_number_of_components );
         BOOST_ASSERT( decompressor().max_v_samp_factor <= max_sampling_factor      );
 
@@ -885,7 +888,7 @@ private:
         decompressor().src = &source_manager_;
     }
 
-    void setup_source( memory_chunk_t & memory_chunk )
+    void setup_source( memory_range_t & memory_chunk )
     {
         setup_source();
 
