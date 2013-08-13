@@ -1,0 +1,6 @@
+
+* http://www.remotesensing.org/libtiff/images.html
+  ftp://ftp.remotesensing.org/pub/libtiff/pics-3.8.0.tar.gz
+
+* http://www.unearthedoutdoors.net/global_data/true_marble/download
+  http://129.123.16.127/globe/TrueMarble_GeoTIFF/TrueMarble.250m.21600x21600.E2.tif.gz

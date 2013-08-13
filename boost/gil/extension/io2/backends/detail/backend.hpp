@@ -128,9 +128,8 @@ namespace detail
 //------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
-///
+/// \internal
 /// \class backend_base
-///
 ////////////////////////////////////////////////////////////////////////////////
 
 class backend_base : noncopyable
@@ -188,36 +187,79 @@ protected:
 ///
 /// \class backend
 ///
+/// \brief Base CRTP class for all image IO implementation classes/backends.
+///
+/// Outlines the basic interface model that is provided by all IO backends. Each
+/// IO backend is a wrapper (i.e. interface adaptor) for a particular 3rd party
+/// image IO library or builtin OS API (e.g. LibPNG, LibTIFF, Windows GDI+, OSX
+/// CoreGraphics, ...). As such individual backends do not map to a particular
+/// image file format (e.g. JPG, PNG, ...), some backends are specialized only
+/// for a single file format (e.g. LibJPEG) while others form more generic
+/// frameworks that can read and write multiple file formats (e.g. WIC).
+///
+/// Particular file formats as well as image IO libraries substantially differ
+/// in significant parts of their design, interface and intended workflow. Some
+/// offer fully generic 2D ROI access while others only sequential row access.
+/// Some have builtin support for non-trivial image and pixel transformations
+/// while others have none. GIL.IO2 does not aim to provide a one-size-fits-all
+/// interface because this is for most parts a very difficult task (e.g. a
+/// compression quality interface for non-lossy formats makes no sense) with a
+/// questionable purpose and gain. For example, emulating 2D ROI access requires
+/// a non-trivial amount of code and logic while at the same proves to be a
+/// self contradicting effort as the extra code (and temporary storage
+/// allocations) defeat the main purpose of ROI access - avoiding extra work
+/// for efficiency reasons.
+///
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class Impl>
 class backend : public backend_base
 {
 public:
+	/// \name Pixel format support
+	/// @{
+
     //typedef typename backend_traits<Impl>::format_t format_t;
 
+	/// MPL vector of pixel<> specializations supported by the backend.
     typedef typename backend_traits<Impl>::supported_pixel_formats_t supported_pixel_formats;
-    typedef typename backend_traits<Impl>::roi_t                     roi;
-    typedef typename roi::offset_t                                   offset_t;
 
     template <typename PixelType, bool IsPlanar>
     struct native_format
         : backend_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
     {};
 
-    template <typename T> struct get_native_format;
+	template <typename T> struct get_native_format;
 
-    template <typename PixelType, typename IsPlanar>
-    struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar::value> {};
+#ifndef DOXYGEN_ONLY
+	template <typename PixelType, typename IsPlanar>
+	struct get_native_format<mpl::pair<PixelType, IsPlanar> > : native_format<PixelType, IsPlanar::value> {};
 
-    template <typename PixelType, bool IsPlanar, class Allocator>
-    struct get_native_format<image<PixelType, IsPlanar, Allocator> > : native_format<PixelType, IsPlanar> {};
+	template <typename PixelType, bool IsPlanar, class Allocator>
+	struct get_native_format<image<PixelType, IsPlanar, Allocator> > : native_format<PixelType, IsPlanar> {};
 
-    template <typename Locator>
-    struct get_native_format<image_view<Locator> > : native_format<typename image_view<Locator>::value_type, is_planar<image_view<Locator> >::value> {};
+	template <typename Locator>
+	struct get_native_format<image_view<Locator> > : native_format<typename image_view<Locator>::value_type, is_planar<image_view<Locator> >::value> {};
+#endif // DOXYGEN_ONLY
 
-    template <typename Source> struct reader_for : gil::io::reader_for<Impl, Source> {};
-    template <typename Target> struct writer_for : gil::io::writer_for<Impl, Target> {};
+	/// @} // pixel format support
+    
+	/// \name Region Of Interest access
+	/// @{
+
+	typedef typename backend_traits<Impl>::roi_t roi; ///< Region-Of-Interest
+    typedef typename roi::offset_t               offset_t; ///< Starting ROI offset
+
+    static bool const has_full_roi = is_same<typename roi::offset_t, typename roi::point_t>::value;
+
+	/// @} // ROI
+
+    // https://bugzilla.gnome.org/show_bug.cgi?id=705937
+	/// \name IO: readers and writers
+	/// @{
+
+    template <typename Source> struct reader_for : gil::io::reader_for<Impl, Source> {}; ///< Returns the class capable of reading images from the Source device
+    template <typename Target> struct writer_for : gil::io::writer_for<Impl, Target> {}; ///< Returns the class capable of writing images to the Target device
 
 #ifdef DOXYGEN_ONLY
 	class native_reader;
@@ -227,7 +269,10 @@ public:
 	class device_writer;
 #endif // DOXYGEN_ONLY
 
-    BOOST_STATIC_CONSTANT( bool, has_full_roi = (is_same<typename roi::offset_t, typename roi::point_t>::value) );
+	// \todo Backend-independent metafunctions that will automatically choose
+	// the backend...
+
+	/// @} // IO
 
 protected:
     typedef          backend                           base_t;
