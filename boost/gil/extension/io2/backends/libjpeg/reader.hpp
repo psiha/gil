@@ -3,7 +3,7 @@
 /// \file libjpeg_image.hpp
 /// -----------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -13,34 +13,24 @@
 ///
 ////////////////////////////////////////////////////////////////////////////////
 //------------------------------------------------------------------------------
+#ifndef reader_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
+#define reader_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 #pragma once
-#ifndef libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
-#define libjpeg_image_hpp__7C5F6951_A00F_4E0D_9783_488A49B1CA2B
 //------------------------------------------------------------------------------
 #include "backend.hpp"
-#include "detail/io_error.hpp"
-#include "detail/libx_shared.hpp"
-#include "detail/shared.hpp"
+#include "../detail/reader.hpp"
+
+#include "boost/gil/extension/io2/detail/io_error.hpp"
+#include "boost/gil/extension/io2/detail/libx_shared.hpp"
+#include "boost/gil/extension/io2/detail/platform_specifics.hpp"
+#include "boost/gil/extension/io2/detail/shared.hpp"
+
+#include "boost/gil/image_view_factory.hpp"
 
 #include <boost/array.hpp>
-#include <boost/range/size.hpp>
+#include <boost/mpl/vector.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
 
-#define JPEG_INTERNALS
-#include "jpeglib.h"
-#undef JPEG_INTERNALS
-
-#ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-    #include <csetjmp>
-#endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-#include <cstdlib>
-#if defined(BOOST_MSVC)
-    #pragma warning( push )
-    #pragma warning( disable : 4996 ) // "The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name."
-    #include "io.h"
-    #include "sys/stat.h"
-#endif // MSVC
-#include "fcntl.h"
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -52,156 +42,10 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-BOOST_STATIC_ASSERT( BITS_IN_JSAMPLE == 8 );
-
-template <typename Pixel, bool isPlanar>
-struct gil_to_libjpeg_format : mpl::integral_c<J_COLOR_SPACE, JCS_UNKNOWN> {};
-
-template <> struct gil_to_libjpeg_format<rgb8_pixel_t , false> : mpl::integral_c<J_COLOR_SPACE, JCS_RGB      > {};
-template <> struct gil_to_libjpeg_format<gray8_pixel_t, false> : mpl::integral_c<J_COLOR_SPACE, JCS_GRAYSCALE> {};
-template <> struct gil_to_libjpeg_format<cmyk8_pixel_t, false> : mpl::integral_c<J_COLOR_SPACE, JCS_CMYK     > {};
-
-
-template <typename Pixel, bool IsPlanar>
-struct libjpeg_is_supported : mpl::bool_<gil_to_libjpeg_format<Pixel, IsPlanar>::value != JCS_UNKNOWN> {};
-
-
-typedef mpl::vector3
-<
-    image<rgb8_pixel_t , false>,
-    image<gray8_pixel_t, false>,
-    image<cmyk8_pixel_t, false>
-> libjpeg_supported_pixel_formats;
-
-
-typedef generic_vertical_roi libjpeg_roi;
-
-
-struct libjpeg_object_wrapper_t
-{
-    union aux_union
-    {
-        jpeg_compress_struct     compressor_;
-        jpeg_decompress_struct decompressor_;
-    } libjpeg_object;
-};
-
-
 #if defined( BOOST_MSVC )
 #   pragma warning( push )
 #   pragma warning( disable : 4127 ) // "conditional expression is constant"
 #endif
-
-class libjpeg_base : private libjpeg_object_wrapper_t
-{
-protected:
-    struct for_decompressor {};
-    struct for_compressor   {};
-
-protected:
-    libjpeg_base( for_decompressor ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
-    {
-        initialize_error_handler();
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( error_handler_target() ) )
-                throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        jpeg_create_decompress( &decompressor() );
-    }
-
-    libjpeg_base( for_compressor ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
-    {
-        initialize_error_handler();
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( error_handler_target() ) )
-                throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        jpeg_create_compress( &compressor() );
-    }
-
-    ~libjpeg_base() { jpeg_destroy( &common() ); }
-
-    void abort() const { jpeg_abort( &mutable_this().common() ); }
-
-    jpeg_common_struct           & common      ()       { return *gil_reinterpret_cast<j_common_ptr>( &libjpeg_object.compressor_ ); }
-    jpeg_common_struct     const & common      () const { return const_cast<libjpeg_base &>( *this ).common      (); }
-    jpeg_compress_struct         & compressor  ()       { return libjpeg_object.compressor_  ; }
-    jpeg_compress_struct   const & compressor  () const { return const_cast<libjpeg_base &>( *this ).compressor  (); }
-    jpeg_decompress_struct       & decompressor()       { return libjpeg_object.decompressor_; }
-    jpeg_decompress_struct const & decompressor() const { return const_cast<libjpeg_base &>( *this ).decompressor(); }
-
-    libjpeg_base & mutable_this() const { return const_cast<libjpeg_base &>( *this ); }
-
-    static libjpeg_base & base( jpeg_common_struct * const p_libjpeg_object )
-    {
-        BOOST_ASSERT( p_libjpeg_object );
-        return *static_cast<libjpeg_base *>( gil_reinterpret_cast<libjpeg_object_wrapper_t *>( p_libjpeg_object ) );
-    }
-
-    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        jmp_buf & error_handler_target() const { return longjmp_target_; }
-    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-
-    static void fatal_error_handler( j_common_ptr const p_cinfo )
-    {
-        #ifdef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            throw_jpeg_error();
-            ignore_unused_variable_warning( p_cinfo );
-        #else
-            longjmp( base( p_cinfo ).error_handler_target(), 1 );
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-    }
-
-    static void throw_jpeg_error()
-    {
-        io_error( "LibJPEG error" );
-    }
-
-private:
-    void initialize_error_handler()
-    {
-        #ifndef NDEBUG
-            jpeg_std_error( &jerr_ );
-        #else
-            std::memset( &jerr_, 0, sizeof( jerr_ ) );
-            jerr_.emit_message    = &emit_message   ;
-            jerr_.output_message  = &output_message ;
-            jerr_.format_message  = &format_message ;
-            jerr_.reset_error_mgr = &reset_error_mgr;
-        #endif // NDEBUG
-        jerr_.error_exit = &error_exit;
-
-        common().err = &jerr_;
-    }
-
-    static void BF_CDECL error_exit( j_common_ptr const p_cinfo )
-    {
-        #ifndef NDEBUG
-            p_cinfo->err->output_message( p_cinfo );
-        #endif
-
-        fatal_error_handler( p_cinfo );
-    }
-
-    static void BF_CDECL output_message( j_common_ptr /*p_cinfo*/                    ) {}
-    static void BF_CDECL emit_message  ( j_common_ptr /*p_cinfo*/, int /*msg_level*/ ) {}
-    static void BF_CDECL format_message( j_common_ptr /*p_cinfo*/, char * /*buffer*/ ) {}
-
-    static void BF_CDECL reset_error_mgr( j_common_ptr const p_cinfo )
-    {
-        BOOST_ASSERT( p_cinfo->err->num_warnings == 0 );
-        BOOST_ASSERT( p_cinfo->err->msg_code     == 0 );
-        ignore_unused_variable_warning( p_cinfo );
-    }
-
-private:
-    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        mutable jmp_buf longjmp_target_;
-    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-
-    jpeg_error_mgr jerr_ ;
-};
-
 
 struct decompression_setup_data_t
 {
@@ -240,265 +84,9 @@ struct view_data_t : decompression_setup_data_t
     unsigned int           number_of_channels_;
 };
 
-
-class libjpeg_writer
-    :
-    private libjpeg_base,
-    public  configure_on_write_writer
-{
-protected:
-    BOOST_STATIC_CONSTANT( bool, auto_closes_device = true );
-
-public:
-    explicit libjpeg_writer( char const * const p_target_file_name )
-        :
-        libjpeg_base( for_compressor() )
-    {
-        setup_destination( p_target_file_name );
-    }
-
-    explicit libjpeg_writer( FILE & file )
-        :
-        libjpeg_base( for_compressor() )
-    {
-        setup_destination( file );
-    }
-
-    ~libjpeg_writer()
-    {
-        jpeg_finish_compress( &compressor() );
-    }
-
-    jpeg_compress_struct       & lib_object()       { return compressor(); }
-    jpeg_compress_struct const & lib_object() const { return const_cast<libjpeg_writer &>( *this ).lib_object(); }
-
-    void write_default( view_data_t const & view ) BOOST_GIL_CAN_THROW //...zzz...a plain throw(...) would be enough here but it chokes GCC...
-    {
-        setup_compression( view );
-
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        jpeg_set_defaults( &compressor() );
-        //jpeg_set_quality( &compressor(), 100, false );
-
-        do_write( view );
-    }
-
-    void write( view_data_t const & view )
-    {
-        setup_compression( view );
-        do_write         ( view );
-    }
-
-private:
-    void setup_compression( view_data_t const & view )
-    {
-        compressor().image_width      = static_cast<JDIMENSION>( view.width_  );
-        compressor().image_height     = static_cast<JDIMENSION>( view.height_ );
-        compressor().input_components = view.number_of_channels_;
-        compressor().in_color_space   = view.format_;
-    }
-
-    void do_write( view_data_t const & view ) BOOST_GIL_CAN_THROW
-    {
-        BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
-
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-        
-        jpeg_start_compress( &compressor(), false );
-
-        JSAMPLE *       p_row( view.buffer_ );
-        JSAMPLE * const p_end( memunit_advanced( view.buffer_, view.height_ * view.stride_ ) );
-        while ( p_row < p_end )
-        {
-            write_row( p_row );
-            memunit_advance( p_row, view.stride_ );
-        }
-    }
-
-    void write_row( JSAMPLE * p_row ) BOOST_GIL_CAN_THROW
-    {
-        BOOST_VERIFY( jpeg_write_scanlines( &compressor(), &p_row, 1 ) == 1 );
-    }
-
-    static libjpeg_writer & get_writer( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( static_cast<libjpeg_writer &>( base( gil_reinterpret_cast<j_common_ptr>( p_cinfo ) ) ) );
-        BOOST_ASSERT( p_cinfo->dest == &writer.destination_manager_ );
-        return writer;
-    }
-
-    void setup_destination()
-    {
-        destination_manager_.next_output_byte = 0;
-        destination_manager_.free_in_buffer   = 0;
-
-        BOOST_ASSERT( compressor().dest == NULL );
-        compressor().dest = &destination_manager_;
-    }
-
-    void setup_destination( FILE & file )
-    {
-        setup_destination();
-
-        compressor().client_data = &file;
-
-        destination_manager_.init_destination    = &init_destination     ;
-        destination_manager_.empty_output_buffer = &empty_FILE_buffer    ;
-        destination_manager_.term_destination    = &term_FILE_destination;
-    }
-
-    void setup_destination( char const * const p_file_name )
-    {
-        int const file_descriptor( /*std*/::open( p_file_name, BF_MSVC_SPECIFIC( O_BINARY | ) O_CREAT | O_WRONLY, S_IREAD | S_IWRITE ) );
-        if ( file_descriptor < 0 )
-            throw_jpeg_error();
-
-        setup_destination();
-
-        compressor().client_data = reinterpret_cast<void *>( file_descriptor );
-
-        destination_manager_.init_destination    = &init_destination             ;
-        destination_manager_.empty_output_buffer = &empty_fd_buffer              ;
-        destination_manager_.term_destination    = &term_and_close_fd_destination;
-    }
-
-    static void BF_CDECL init_destination( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( get_writer( p_cinfo ) );
-
-        writer.destination_manager_.next_output_byte = writer.write_buffer_.begin();
-        writer.destination_manager_.free_in_buffer   = writer.write_buffer_.size ();
-    }
-
-    void write_FILE_bytes( std::size_t const number_of_bytes )
-    {
-        if
-        (
-            /*std*/::fwrite
-            (
-                write_buffer_.begin(),
-                number_of_bytes,
-                1,
-                static_cast<FILE *>( compressor().client_data )
-            ) != 1
-        )
-            fatal_error_handler( &common() );
-    }
-
-    void write_fd_bytes( std::size_t const number_of_bytes )
-    {
-        if
-        (
-            /*std*/::write
-            (
-                reinterpret_cast<long>( compressor().client_data ),
-                write_buffer_.begin(),
-                number_of_bytes
-            ) != static_cast<int>( number_of_bytes )
-        )
-            fatal_error_handler( &common() );
-    }
-    
-    static boolean BF_CDECL empty_FILE_buffer( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( get_writer( p_cinfo ) );
-        writer.write_FILE_bytes( writer.write_buffer_.size() );
-        init_destination( p_cinfo );
-        return true;
-    }
-
-    static boolean BF_CDECL empty_fd_buffer( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( get_writer( p_cinfo ) );
-        writer.write_fd_bytes( writer.write_buffer_.size() );
-        init_destination( p_cinfo );
-        return true;
-    }
-
-    static void BF_CDECL term_FILE_destination( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( get_writer( p_cinfo ) );
-
-        std::size_t const remaining_bytes( writer.write_buffer_.size() - writer.destination_manager_.free_in_buffer );
-
-        writer.write_FILE_bytes( remaining_bytes );
-    }
-
-    static void BF_CDECL term_fd_destination( j_compress_ptr const p_cinfo )
-    {
-        libjpeg_writer & writer( get_writer( p_cinfo ) );
-
-        std::size_t const remaining_bytes( writer.write_buffer_.size() - writer.destination_manager_.free_in_buffer );
-
-        writer.write_fd_bytes( remaining_bytes );
-    }
-
-    // Ensure that jpeg_finish_compress() is called so that this gets called...
-    static void BF_CDECL term_and_close_FILE_destination( j_compress_ptr const p_cinfo )
-    {
-        term_FILE_destination( p_cinfo );
-        BOOST_VERIFY( /*std*/::fclose( static_cast<FILE *>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
-    }
-
-    static void BF_CDECL term_and_close_fd_destination( j_compress_ptr const p_cinfo )
-    {
-        term_fd_destination( p_cinfo );
-        BOOST_VERIFY( /*std*/::close( reinterpret_cast<long>( get_writer( p_cinfo ).compressor().client_data ) ) == 0 );
-    }
-
-private:
-    jpeg_destination_mgr        destination_manager_;
-    array<unsigned char, 65536> write_buffer_       ;
-};
 //------------------------------------------------------------------------------
 } // namespace detail
-
-
-class libjpeg_image;
-
-template <>
-struct backend_traits<libjpeg_image>
-{
-    typedef       ::J_COLOR_SPACE                   format_t;
-    typedef detail::libjpeg_supported_pixel_formats supported_pixel_formats_t;
-    typedef detail::libjpeg_roi                     roi_t;
-    typedef detail::view_data_t                     view_data_t;
-
-    struct gil_to_native_format
-    {
-        template <typename Pixel, bool IsPlanar>
-        struct apply : detail::gil_to_libjpeg_format<Pixel, IsPlanar> {};
-    };
-
-    template <typename Pixel, bool IsPlanar>
-    struct is_supported : detail::libjpeg_is_supported<Pixel, IsPlanar> {};
-
-    typedef mpl::map3
-            <
-                mpl::pair<memory_range_t        , detail::seekable_input_memory_range_extender<libjpeg_image> >,
-                mpl::pair<FILE                  ,                                              libjpeg_image  >,
-                mpl::pair<char           const *, detail::input_c_str_for_mmap_extender       <libjpeg_image> >
-            > native_sources;
-
-    typedef mpl::map2
-            <
-                mpl::pair<FILE        , detail::libjpeg_writer>,
-                mpl::pair<char const *, detail::libjpeg_writer>
-            > native_sinks;
-
-    typedef mpl::vector1_c<format_tag, jpeg> supported_image_formats;
-
-    typedef view_data_t writer_view_data_t;
-
-    BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
-    BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-};
+//------------------------------------------------------------------------------
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -507,14 +95,10 @@ struct backend_traits<libjpeg_image>
 ///
 ////////////////////////////////////////////////////////////////////////////////
 
-class libjpeg_image
+class libjpeg_reader
     :
-    public detail::libjpeg_base,
-    public detail::backend<libjpeg_image>
+    public libjpeg_image
 {
-public:
-    struct guard {};
-
 public:
     format_t format() const { return decompressor().jpeg_color_space; }
 
@@ -550,19 +134,7 @@ public:
         return image_format_id( closest_gil_supported_format() );
     }
 
-    static image_type_id image_format_id( format_t const closest_gil_supported_format )
-    {
-        switch ( closest_gil_supported_format )
-        {
-            case JCS_RGB      : return 0;
-            case JCS_GRAYSCALE: return 1;
-            case JCS_CMYK     : return 2;
-            default:
-                BOOST_ASSERT( closest_gil_supported_format == JCS_UNKNOWN );
-                return unsupported_format;
-        }
-    }
-
+ 
     point2<std::ptrdiff_t> dimensions() const
     {
         // Implementation note:
@@ -587,7 +159,8 @@ public: // Low-level (row, strip, tile) access
     jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
 
 public: /// \ingroup Construction
-    explicit libjpeg_image( memory_range_t & memory_chunk )
+	template <class Device>
+    explicit libjpeg_image( Device & device )
         :
         libjpeg_base( for_decompressor() )
     {
@@ -596,24 +169,11 @@ public: /// \ingroup Construction
                 libjpeg_base::throw_jpeg_error();
         #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
-        setup_source( memory_chunk );
+        setup_source( device );
 
         read_header();
     }
 
-    explicit libjpeg_image( FILE & file )
-        :
-        libjpeg_base( for_decompressor() )
-    {
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-
-        setup_source( file );
-
-        read_header();
-    }
 
 private: // Private interface for the base backend<> class.
     // Implementation note:
@@ -1025,7 +585,7 @@ private:
     array<JOCTET, 4096> read_buffer_            ;//...zzz...extract to a wrapper...not needed for in memory sources...
 };
 
-#if defined(BOOST_MSVC)
+#if defined( BOOST_MSVC )
 #   pragma warning( pop )
 #endif
 
@@ -1088,8 +648,8 @@ private:
 } // namespace boost
 //------------------------------------------------------------------------------
 
-#if defined(BOOST_MSVC)
+#if defined( BOOST_MSVC )
     #pragma warning( pop )
 #endif // MSVC
 
-#endif // libjpeg_image_hpp
+#endif // reader_hpp

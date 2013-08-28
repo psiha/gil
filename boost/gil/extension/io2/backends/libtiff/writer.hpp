@@ -5,7 +5,7 @@
 ///
 /// LibTIFF writer.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -26,8 +26,6 @@
 #include "boost/gil/extension/io2/detail/libx_shared.hpp"
 #include "boost/gil/extension/io2/detail/platform_specifics.hpp"
 #include "boost/gil/extension/io2/detail/shared.hpp"
-
-#include <boost/array.hpp>
 //------------------------------------------------------------------------------
 namespace boost
 {

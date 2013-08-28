@@ -224,6 +224,8 @@ public:
 	/// MPL vector of pixel<> specializations supported by the backend.
     typedef typename backend_traits<Impl>::supported_pixel_formats_t supported_pixel_formats;
 
+	/// Native backend <-> GIL format mapping and conversion
+	/// 
     template <typename PixelType, bool IsPlanar>
     struct native_format
         : backend_traits<Impl>::gil_to_native_format:: BOOST_NESTED_TEMPLATE apply<PixelType, IsPlanar>::type
@@ -256,6 +258,8 @@ public:
 
     // https://bugzilla.gnome.org/show_bug.cgi?id=705937
 	/// \name IO: readers and writers
+	/// GIL::IO2 offers separate classes for reading and writing images as this
+	/// best maps to usual use cases and intended workflows of individual backends
 	/// @{
 
     template <typename Source> struct reader_for : gil::io::reader_for<Impl, Source> {}; ///< Returns the class capable of reading images from the Source device
