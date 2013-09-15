@@ -5,7 +5,7 @@
 ///
 /// Base CRTP class for backend readers.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -104,7 +104,7 @@ private:
 private:
     View   const & view_  ;
     Offset         offset_;
-};
+}; // class offset_view_t
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -119,26 +119,17 @@ namespace detail
 {
 //------------------------------------------------------------------------------
 
-template <class View, typename Offset>
-View const & original_view( offset_view_t<View, Offset> const & offset_view ) { return offset_view.original_view(); }
+template <class View, typename Offset> View const & original_view( offset_view_t<View, Offset> const & offset_view ) { return offset_view.original_view(); }
+template <class View                 > View const & original_view( View                        const & view        ) { return view;                        }
 
-template <class View>
-View const & original_view( View const & view ) { return view; }
+template <typename Offset, class View> Offset         get_offset( View                        const &             ) { return Offset();             }
+template <typename Offset, class View> Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
 
-template <typename Offset, class View>
-Offset         get_offset( View                        const &             ) { return Offset();            }
-template <typename Offset, class View>
-Offset const & get_offset( offset_view_t<View, Offset> const & offset_view ) { return offset_view.offset(); }
+template <typename Offset> Offset         get_offset_x( Offset         const &        ) { return Offset(); }
+template <typename Offset> Offset const & get_offset_x( point2<Offset> const & offset ) { return offset.x; }
 
-template <typename Offset>
-Offset         get_offset_x( Offset         const &        ) { return Offset(); }
-template <typename Offset>
-Offset const & get_offset_x( point2<Offset> const & offset ) { return offset.x; }
-
-template <typename Offset>
-Offset         get_offset_y( Offset         const & offset ) { return offset;   }
-template <typename Offset>
-Offset const & get_offset_y( point2<Offset> const & offset ) { return offset.y; }
+template <typename Offset> Offset         get_offset_y( Offset         const & offset ) { return offset;   }
+template <typename Offset> Offset const & get_offset_y( point2<Offset> const & offset ) { return offset.y; }
 
 
 template <class NewView, class View, typename Offset>
@@ -165,10 +156,25 @@ template <typename View, typename Offset> struct get_original_view_t<offset_view
 class backend_reader_base
 {
 public:
-    typedef point2<std::ptrdiff_t> dimensions_t;
+    typedef point2<unsigned int> dimensions_t;
 
-    typedef unsigned int image_type_id;
-    static image_type_id const unsupported_format = static_cast<image_type_id>( -1 );
+    ////////////////////////////////////////////////////////////////////////////
+    //
+    // image_type_id_t
+    // -------------
+    //
+    ////////////////////////////////////////////////////////////////////////////
+    ///
+    /// \brief Locally adjusts a view with a ROI/offset to prevent it exceeding
+    /// the image dimensions when 'merged' with its offset. Done here so that
+    /// backend classes do not need to handle this.
+    /// \internal
+    /// \throws nothing
+    ///
+    ////////////////////////////////////////////////////////////////////////////
+
+    typedef unsigned int image_type_id_t;
+    static image_type_id_t const unsupported_format = static_cast<image_type_id_t>( -1 );
 
 protected:
     static bool dimensions_mismatch( dimensions_t const & mine, dimensions_t const & other ) { return mine != other; }
@@ -251,12 +257,12 @@ protected:
             BOOST_ASSERT( my_dimensions.x == target_dimensions.x    );
         }
 
-        unsigned int const width ( zero_x_offset ? target_dimensions.x : (std::min)( my_dimensions.x - get_offset_x( offset_view.offset() ), target_dimensions.x ) );
-        unsigned int const height(                                       (std::min)( my_dimensions.y - get_offset_y( offset_view.offset() ), target_dimensions.y ) );
+        unsigned int const width ( zero_x_offset ? target_dimensions.x : std::min<unsigned int>( my_dimensions.x - get_offset_x( offset_view.offset() ), target_dimensions.x ) );
+        unsigned int const height(                                       std::min<unsigned int>( my_dimensions.y - get_offset_y( offset_view.offset() ), target_dimensions.y ) );
         
         return subimage_view( offset_view.original_view(), 0, 0, width, height );
     }
-};
+}; // class backend_reader_base
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -403,7 +409,7 @@ public: // Low-level (row, strip, tile) access
         return impl().pixel_size() * impl().dimensions().x;
     }
 
-    static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    static image_type_id_t image_format_id( format_t const closest_gil_supported_format )
     {
         // This (linear search) will be transformed into a switch...
         image_id_finder finder( closest_gil_supported_format );
