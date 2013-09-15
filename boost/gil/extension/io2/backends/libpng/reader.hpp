@@ -39,13 +39,6 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
-namespace detail
-{
-//------------------------------------------------------------------------------
-
-//------------------------------------------------------------------------------
-} // namespace detail
-
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -57,46 +50,16 @@ namespace detail
 
 class libpng_reader
     :
-    public detail::libpng_image
+    public libpng_image
 {
 public:
     struct guard {};
 
-public:
-    format_t format() const
-    {
-        return ::png_get_color_type( &png_object(), &info_object() ) | ( bit_depth() << 16 );
-    }
-
-    format_t closest_gil_supported_format() const
-    {
-        format_t const current_format( format() );
-
-        switch ( current_format & 0xFF )
-        {
-            default: return current_format;
-
-            case PNG_COLOR_TYPE_PALETTE   : return PNG_COLOR_TYPE_RGB  | (                                   8 << 16 ); // 8-bit RGB
-            case PNG_COLOR_TYPE_GRAY_ALPHA: return PNG_COLOR_TYPE_RGBA | ( ( ( current_format >> 16 ) & 0xFF ) << 16 ); // (bits of current_format) RGBA
-        }
-    }
-
-    image_type_id current_image_format_id() const
-    {
-        return image_format_id( closest_gil_supported_format() );
-    }
-
-
-    std::size_t pixel_size() const
-    {
-        return number_of_channels() * bit_depth() / 8;
-    }
-
 public: /// \ingroup Construction
 	template <class Device>
-    explicit libpng_image( Device & device )
+    explicit libpng_reader( Device & device )
         :
-        libpng_base( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
+        libpng_image( ::png_create_read_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
     {
         if ( !successful_creation() )
             cleanup_and_throw_libpng_error();
@@ -119,23 +82,11 @@ public: /// \ingroup Construction
         destroy_read_struct();
     }
 
-public:
-    point2<std::ptrdiff_t> dimensions() const
-    {
-        return point2<std::ptrdiff_t>
-        (
-            ::png_get_image_width ( &png_object(), &info_object() ),
-            ::png_get_image_height( &png_object(), &info_object() )
-        );
-    }
-
 public: // Low-level (row, strip, tile) access
     void read_row( sequential_row_read_state, unsigned char * const p_row_storage ) const
     {
         read_row( p_row_storage );
     }
-
-    png_struct & lib_object() const { return png_object(); }
 
 private: // Private backend_base interface.
     // Implementation note:
@@ -267,7 +218,7 @@ private: // Private backend_base interface.
         }
     }
 
-    std::size_t cached_format_size( format_t const format ) const
+    unsigned int cached_format_size( format_t const format ) const
     {
         return number_of_channels() * format_bit_depth( format ) / 8;
     }
@@ -315,9 +266,6 @@ private:
         }
     }
 
-    unsigned int number_of_channels() const { return ::png_get_channels ( &png_object(), &info_object() ); }
-    std::size_t  bit_depth         () const { return ::png_get_bit_depth( &png_object(), &info_object() ); }
-
     void destroy_read_struct() { ::png_destroy_read_struct( &png_object_for_destruction(), &info_object_for_destruction(), NULL ); }
 
     void read_row( png_byte * const p_row ) const BOOST_GIL_CAN_THROW
@@ -354,7 +302,7 @@ private:
         else
             detail::png_error_function( png_ptr, "Read Error" );
     }
-};
+}; // class libpng_reader
 
 //------------------------------------------------------------------------------
 } // namespace gil

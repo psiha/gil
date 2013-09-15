@@ -58,6 +58,20 @@ set( CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${ltoLink
 
 set( public_headers_path "${CMAKE_CURRENT_SOURCE_DIR}/../../../../boost/gil/extension/io2" )
 
+set( headers_libjpeg
+    ${public_headers_path}/backends/libjpeg/backend.hpp
+    ${public_headers_path}/backends/libjpeg/reader.hpp
+    ${public_headers_path}/backends/libjpeg/writer.hpp
+)
+source_group( "LibJPEG" FILES ${headers_libjpeg} )
+
+set( headers_libpng
+    ${public_headers_path}/backends/libpng/backend.hpp
+    ${public_headers_path}/backends/libpng/reader.hpp
+    ${public_headers_path}/backends/libpng/writer.hpp
+)
+source_group( "LibPNG" FILES ${headers_libpng} )
+
 set( headers_libtiff
     ${public_headers_path}/backends/libtiff/backend.hpp
     ${public_headers_path}/backends/libtiff/reader.hpp
@@ -66,6 +80,13 @@ set( headers_libtiff
 source_group( "LibTIFF" FILES ${headers_libtiff} )
 
 if ( WIN32 )
+set( headers_gp
+    ${public_headers_path}/backends/gp/backend.hpp
+    ${public_headers_path}/backends/gp/reader.hpp
+    ${public_headers_path}/backends/gp/writer.hpp
+)
+source_group( "GDI+" FILES ${headers_gp} )
+
 set( headers_wic
     ${public_headers_path}/backends/wic/backend.hpp
     ${public_headers_path}/backends/wic/reader.hpp
@@ -74,7 +95,14 @@ set( headers_wic
 source_group( "WIC" FILES ${headers_wic} )
 endif()
 
-add_executable( gio_io2_tester test.cpp ${headers_libtiff} ${headers_wic} )
+add_executable( gio_io2_tester
+    test.cpp
+    ${headers_libjpeg}
+    ${headers_libpng}
+    ${headers_libtiff}
+    ${headers_gp}
+    ${headers_wic}
+)
 
 #addPCH( gio_io2_tester precompiled_headers )
 

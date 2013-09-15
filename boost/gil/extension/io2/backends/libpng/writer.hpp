@@ -39,9 +39,6 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
-namespace detail
-{
-//------------------------------------------------------------------------------
 
 ////////////////////////////////////////////////////////////////////////////////
 ///
@@ -51,7 +48,7 @@ namespace detail
 
 class libpng_writer
     :
-    public libpng_base,
+    public libpng_image,
     public configure_on_write_writer
 {
 public:
@@ -103,7 +100,7 @@ public:
 protected:
     libpng_writer( void * const p_target_object, png_rw_ptr const write_data_fn, png_flush_ptr const output_flush_fn )
         :
-        libpng_base( ::png_create_write_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
+        libpng_image( ::png_create_write_struct_2( PNG_LIBPNG_VER_STRING, NULL, &detail::png_error_function, &detail::png_warning_function, NULL, NULL, NULL ) )
     {
         if ( !successful_creation() )
             cleanup_and_throw_libpng_error();
@@ -129,7 +126,7 @@ private:
     {
         ::png_set_write_fn( &png_object(), p_target_object, write_data_fn, output_flush_fn );
     }
-};
+}; // class libpng_writer
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -168,10 +165,8 @@ private:
 
         std::fflush( static_cast<FILE *>( png_ptr->io_ptr ) );
     }
-};
+}; // class libpng_writer_FILE
 
-//------------------------------------------------------------------------------
-} // namespace detail
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------

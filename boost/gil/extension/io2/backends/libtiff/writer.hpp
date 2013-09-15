@@ -138,7 +138,7 @@ private:
     {
         BOOST_VERIFY( ::TIFFSetField( &lib_object(), tag, value1, value2 ) );
     }
-};
+}; // class libtiff_image::native_writer
 
 //------------------------------------------------------------------------------
 } // namespace io

@@ -34,9 +34,6 @@ namespace boost
 namespace gil
 {
 //------------------------------------------------------------------------------
-namespace detail
-{
-//------------------------------------------------------------------------------
 
 class libjpeg_writer
     :
@@ -73,10 +70,10 @@ public:
     {
         setup_compression( view );
 
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        if ( setjmp( libjpeg_base::error_handler_target() ) )
+            libjpeg_base::throw_jpeg_error();
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         jpeg_set_defaults( &compressor() );
         //jpeg_set_quality( &compressor(), 100, false );
 
@@ -102,10 +99,10 @@ private:
     {
         BOOST_ASSERT( view.format_ != JCS_UNKNOWN );
 
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        if ( setjmp( libjpeg_base::error_handler_target() ) )
+            libjpeg_base::throw_jpeg_error();
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
         
         jpeg_start_compress( &compressor(), false );
 
@@ -158,7 +155,7 @@ private:
 
         setup_destination();
 
-        compressor().client_data = reinterpret_cast<void *>( file_descriptor );
+        compressor().client_data = reinterpret_cast<void *>( static_cast<std::intptr_t>( file_descriptor ) );
 
         destination_manager_.init_destination    = &init_destination             ;
         destination_manager_.empty_output_buffer = &empty_fd_buffer              ;
@@ -194,7 +191,7 @@ private:
         (
             /*std*/::write
             (
-                reinterpret_cast<long>( compressor().client_data ),
+                static_cast<int>( reinterpret_cast<std::intptr_t>( compressor().client_data ) ),
                 write_buffer_.begin(),
                 number_of_bytes
             ) != static_cast<int>( number_of_bytes )
@@ -252,19 +249,11 @@ private:
 private:
     jpeg_destination_mgr        destination_manager_;
     array<unsigned char, 65536> write_buffer_       ;
-};
-//------------------------------------------------------------------------------
-} // namespace detail
-
+}; // class libjpeg_writer
 
 //------------------------------------------------------------------------------
 } // namespace gil
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-
-#if defined( BOOST_MSVC )
-    #pragma warning( pop )
-#endif // MSVC
-
 #endif // writer_hpp

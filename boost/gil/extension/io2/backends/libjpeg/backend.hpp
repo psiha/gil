@@ -33,10 +33,6 @@
 #include "jpeglib.h"
 #undef JPEG_INTERNALS
 
-#ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-    #include <csetjmp>
-#endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-#include <cstdlib>
 #if defined(BOOST_MSVC)
     #pragma warning( push )
     #pragma warning( disable : 4996 ) // "The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name."
@@ -44,6 +40,12 @@
     #include "sys/stat.h"
 #endif // MSVC
 #include "fcntl.h"
+
+#ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+#include <csetjmp>
+#endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+#include <cstddef>
+#include <cstdlib>
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -153,8 +155,65 @@ class libjpeg_image
 public:
 	struct guard {};
 
-public:
-	static image_type_id image_format_id(format_t const closest_gil_supported_format)
+public: /// \ingroup Information
+    typedef point2<unsigned int> dimensions_t;
+
+    dimensions_t dimensions() const
+    {
+        BOOST_STATIC_ASSERT( offsetof( jpeg_compress_struct, image_width  ) == offsetof( jpeg_decompress_struct, image_width  ) );
+        BOOST_STATIC_ASSERT( offsetof( jpeg_compress_struct, image_height ) == offsetof( jpeg_decompress_struct, image_height ) );
+        return dimensions_t( decompressor().image_width, decompressor().image_height );
+    }
+
+    unsigned int number_of_channels() const
+    {
+        BOOST_STATIC_ASSERT( offsetof( jpeg_compress_struct, num_components ) == offsetof( jpeg_decompress_struct, num_components ) );
+        return decompressor().num_components;
+    }
+
+    format_t format() const
+    {
+        BOOST_STATIC_ASSERT( offsetof( jpeg_compress_struct, jpeg_color_space ) == offsetof( jpeg_decompress_struct, jpeg_color_space ) );
+        return decompressor().jpeg_color_space;
+    }
+
+    format_t closest_gil_supported_format() const
+    {
+        format_t const current_format( format() );
+        #ifdef _DEBUG
+        switch ( current_format )
+        {
+            case JCS_RGB      :
+            case JCS_YCbCr    :
+            case JCS_CMYK     :
+            case JCS_YCCK     :
+            case JCS_GRAYSCALE:
+            case JCS_UNKNOWN  :
+                break;
+
+            default:
+                BOOST_ASSERT( !"Unknown format code." );
+        }
+        #endif
+
+        switch ( current_format )
+        {
+            default        : return current_format;
+
+            case JCS_BG_RGB:
+            case JCS_BG_YCC:
+            case JCS_YCbCr : return JCS_RGB       ;
+            case JCS_YCCK  : return JCS_CMYK      ;
+        }
+    }
+
+    image_type_id_t current_image_format_id() const
+    {
+        return image_format_id( closest_gil_supported_format() );
+    }
+
+
+	static image_type_id_t image_format_id( format_t const closest_gil_supported_format )
 	{
 		switch ( closest_gil_supported_format )
 		{

@@ -79,7 +79,7 @@ struct gp_is_supported : is_supported<gil_to_gp_format<Pixel, IsPlanar>::value>{
 
 
 typedef mpl::
-#if (GDIPVER >= 0x0110)
+#if ( GDIPVER >= 0x0110 )
     vector4
 #else
     vector3
@@ -88,16 +88,13 @@ typedef mpl::
     image<bgr8_pixel_t     , false>,
     image<bgra8_pixel_t    , false>,
     image<gp_bgr565_pixel_t, false>
-    #if (GDIPVER >= 0x0110)
+    #if ( GDIPVER >= 0x0110 )
     ,image<cmyk8_pixel_t   , false>
     #endif
 > gp_supported_pixel_formats;
 
 
-typedef iterator_range<TCHAR const *> string_chunk_t;
-
-
-/*string_chunk_t*/char const * error_string( Gdiplus::GpStatus const status )
+char const * error_string( Gdiplus::GpStatus const status )
 {
     using namespace Gdiplus;
     switch ( status )
@@ -119,12 +116,12 @@ typedef iterator_range<TCHAR const *> string_chunk_t;
         case UnsupportedGdiplusVersion : return "Unsupported GDI+ version";
         case PropertyNotFound          : return "Specified property does not exist in the image";
         case PropertyNotSupported      : return "Specified property not supported by the format of the image";
-        #if (GDIPVER >= 0x0110)
+        #if ( GDIPVER >= 0x0110 )
         case ProfileNotFound           : return "Profile required to save an image in CMYK format not found";
         #endif //(GDIPVER >= 0x0110)
     }
 
-    // Programmer errors:
+    // Programmer errors or GIL::IO2 bugs:
     switch ( status )
     {
         case Ok                        : BOOST_ASSERT( !"Should not be called for no error" ); BF_UNREACHABLE_CODE break;
@@ -139,7 +136,7 @@ typedef iterator_range<TCHAR const *> string_chunk_t;
 inline void ensure_result( Gdiplus::GpStatus const result )
 {
     if ( result != Gdiplus::Ok )
-        io_error( error_string( result )/*.begin()*/ );
+        io_error( error_string( result ) );
 }
 
 inline void verify_result( Gdiplus::GpStatus const result )
@@ -165,7 +162,7 @@ public:
 
     gp_roi( offset_t const top_left, offset_t const bottom_right )
         : Gdiplus::Rect( Gdiplus::Point( top_left.x, top_left.y ), Gdiplus::Size( bottom_right.x - top_left.x, bottom_right.y - top_left.y ) ) {}
-};
+}; // class gp_roi
 
 class gp_view_base;
 
@@ -251,13 +248,13 @@ struct backend_traits<gp_image>
 
     private:
         aligned_storage<sizeof( roi_t ), alignment_of<roi_t>::value>::type optional_roi_;
-    };
+    }; // class view_data_t
 
     typedef view_data_t writer_view_data_t;
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( Gdiplus::ARGB ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true                    );
-};
+}; // struct backend_traits<gp_image>
 
 
 #if defined( BOOST_MSVC )
@@ -273,19 +270,33 @@ class gp_image
 public:
     typedef detail::gp_user_guard guard;
 
-public: /// \ingroup Construction
+protected: /// \ingroup Construction
     ~gp_image()
     {
         detail::verify_result( Gdiplus::DllExports::GdipDisposeImage( pBitmap_ ) );
     }
 
-public:
-    point2<std::ptrdiff_t> dimensions() const
+public: /// \ingroup Information
+    typedef point2<unsigned int> dimensions_t;
+
+    dimensions_t dimensions() const
     {
         using namespace Gdiplus;
-        REAL width, height;
-        detail::verify_result( DllExports::GdipGetImageDimension( const_cast<GpBitmap *>( pBitmap_ ), &width, &height ) );
-        return point2<std::ptrdiff_t>( static_cast<std::ptrdiff_t>( width ), static_cast<std::ptrdiff_t>( height ) );
+        REAL width_float, height_float;
+        detail::verify_result( DllExports::GdipGetImageDimension( const_cast<GpBitmap *>( pBitmap_ ), &width_float, &height_float ) );
+    #ifndef NDEBUG
+        BOOST_ASSERT( static_cast<unsigned int>( width_float  ) == width_float  );
+        BOOST_ASSERT( static_cast<unsigned int>( height_float ) == height_float );
+        UINT width ; detail::verify_result( DllExports::GetWidth ( const_cast<GpBitmap *>( pBitmap_ ), &width  ) );
+        UINT height; detail::verify_result( DllExports::GetHeight( const_cast<GpBitmap *>( pBitmap_ ), &height ) );
+        BOOST_ASSERT( width_float  == width  );
+        BOOST_ASSERT( height_float == height );
+    #endif // NDEBUG
+        return dimensions_t
+        (
+            static_cast<dimensions_t::value_type>( width_float  ),
+            static_cast<dimensions_t::value_type>( height_float )
+        );
     }
 
     format_t format() const
@@ -295,14 +306,61 @@ public:
         return pixel_format;
     }
 
-    static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    format_t closest_gil_supported_format() const
+    {
+        //http://www.tech-archive.net/Archive/Development/microsoft.public.win32.programmer.gdi/2008-01/msg00044.html
+        switch ( format() )
+        {
+            case PixelFormat16bppGrayScale:
+            case PixelFormat48bppRGB      :
+            case PixelFormat32bppRGB      :
+            case PixelFormat24bppRGB      :
+                return
+                    PixelFormat24bppRGB;
+
+            case PixelFormat64bppPARGB    :
+            case PixelFormat32bppPARGB    :
+            case PixelFormat64bppARGB     :
+            case PixelFormat32bppARGB     :
+            case PixelFormat16bppARGB1555 :
+                return
+                    PixelFormat32bppARGB;
+
+            case PixelFormat16bppRGB565   :
+            case PixelFormat16bppRGB555   :
+            case PixelFormat8bppIndexed   :
+            case PixelFormat4bppIndexed   :
+            case PixelFormat1bppIndexed   :
+                return
+                    PixelFormat16bppRGB565;
+
+            case PixelFormat32bppCMYK:
+                return
+                #if ( GDIPVER >= 0x0110 )
+                    PixelFormat32bppCMYK;
+                #else
+                    PixelFormat24bppRGB;
+                #endif // GDIPVER >= 0x0110
+
+            default:
+                BF_UNREACHABLE_CODE
+                return PixelFormatUndefined;
+        }
+    }
+
+    image_type_id_t current_image_format_id() const
+    {
+        return image_format_id( closest_gil_supported_format() );
+    }
+
+    static image_type_id_t image_format_id( format_t const closest_gil_supported_format )
     {
         switch ( closest_gil_supported_format )
         {
             case PixelFormat24bppRGB      : return 0;
             case PixelFormat32bppARGB     : return 1;
             case PixelFormat16bppRGB565   : return 2;
-            #if (GDIPVER >= 0x0110)
+            #if ( GDIPVER >= 0x0110 )
             case PixelFormat32bppCMYK     : return 3;
             #endif
 
@@ -312,14 +370,17 @@ public:
         }
     }
 
-    ::Gdiplus::GpBitmap       & lib_object()       { return *pBitmap_; }
-    ::Gdiplus::GpBitmap const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
+public: /// \ingroup Low level access
+    typedef ::Gdiplus::GpBitmap lib_object_t;
+
+    lib_object_t       & lib_object()       { return *pBitmap_; }
+    lib_object_t const & lib_object() const { return const_cast<gp_image &>( *this ).lib_object(); }
 
 private:
     friend class detail::gp_view_base;
 
-    Gdiplus::GpBitmap * /*const*/ pBitmap_;
-};
+    lib_object_t * /*const*/ pBitmap_;
+}; // class gp_image
 
 #if defined( BOOST_MSVC )
 #   pragma warning( pop )

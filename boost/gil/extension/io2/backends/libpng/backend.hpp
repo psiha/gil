@@ -250,7 +250,7 @@ struct backend_traits<libpng_image>
 
     BOOST_STATIC_CONSTANT( unsigned int, desired_alignment  = sizeof( void * ) );
     BOOST_STATIC_CONSTANT( bool        , builtin_conversion = true             );
-};
+}; // struct backend_traits<libpng_image>
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -269,25 +269,61 @@ class libpng_image
 public:
 	struct guard {};
 
-	typedef lib_object_t lib_object_t;
+public: /// \ingroup Information
+    typedef point2<unsigned int> dimensions_t;
 
-	lib_object_t & lib_object() { return *this; }
+    dimensions_t dimensions() const
+    {
+        return dimensions_t
+        (
+            ::png_get_image_width ( &png_object(), &info_object() ),
+            ::png_get_image_height( &png_object(), &info_object() )
+        );
+    }
 
-	static image_type_id image_format_id( format_t const closest_gil_supported_format )
+    unsigned int number_of_channels() const { return ::png_get_channels ( &png_object(), &info_object() ); }
+    unsigned int bit_depth         () const { return ::png_get_bit_depth( &png_object(), &info_object() ); }
+
+    format_t format() const { return ::png_get_color_type( &png_object(), &info_object() ) | ( bit_depth() << 16 ); }
+
+    format_t closest_gil_supported_format() const
+    {
+        format_t const current_format( format() );
+
+        switch ( current_format & 0xFF )
+        {
+            default: return current_format;
+
+            case PNG_COLOR_TYPE_PALETTE   : return PNG_COLOR_TYPE_RGB  | (                                   8 << 16 ); // 8-bit RGB
+            case PNG_COLOR_TYPE_GRAY_ALPHA: return PNG_COLOR_TYPE_RGBA | ( ( ( current_format >> 16 ) & 0xFF ) << 16 ); // (bits of current_format) RGBA
+        }
+    }
+
+    image_type_id_t current_image_format_id() const { return image_format_id( closest_gil_supported_format() ); }
+
+    unsigned int pixel_size() const { return number_of_channels() * bit_depth() / 8; }
+
+	static image_type_id_t image_format_id( format_t const closest_gil_supported_format )
 	{
 		switch ( closest_gil_supported_format )
 		{
-			case PNG_COLOR_TYPE_RGB | ( 8 << 16 ) : return 0;
-			case PNG_COLOR_TYPE_RGB_ALPHA | ( 8 << 16 ) : return 1;
-			case PNG_COLOR_TYPE_GRAY | ( 8 << 16 ) : return 2;
-			case PNG_COLOR_TYPE_RGB | ( 16 << 16 ) : return 3;
+			case PNG_COLOR_TYPE_RGB       | (  8 << 16 ) : return 0;
+			case PNG_COLOR_TYPE_RGB_ALPHA | (  8 << 16 ) : return 1;
+			case PNG_COLOR_TYPE_GRAY      | (  8 << 16 ) : return 2;
+			case PNG_COLOR_TYPE_RGB       | ( 16 << 16 ) : return 3;
 			case PNG_COLOR_TYPE_RGB_ALPHA | ( 16 << 16 ) : return 4;
-			case PNG_COLOR_TYPE_GRAY | ( 16 << 16 ) : return 5;
+			case PNG_COLOR_TYPE_GRAY      | ( 16 << 16 ) : return 5;
 
 			default:
 				return unsupported_format;
 		}
 	}
+
+public:
+    typedef lib_object_t lib_object_t;
+
+	lib_object_t       & lib_object()       { return *this; }
+    lib_object_t const & lib_object() const { return *this; }
 
 protected:
 	libpng_image( png_struct * const p_png )
@@ -298,12 +334,12 @@ protected:
 	//...zzz...forced by LibPNG into either duplication or this anti-pattern...
 	bool successful_creation() const { return is_valid(); }
 
-	static std::size_t format_bit_depth( libpng_view_data_t::format_t const format )
+	static unsigned int format_bit_depth( libpng_view_data_t::format_t const format )
 	{
 		return ( format >> 16 ) & 0xFF;
 	}
 
-	static std::size_t format_colour_type( libpng_view_data_t::format_t const format )
+	static unsigned int format_colour_type( libpng_view_data_t::format_t const format )
 	{
 		return format & 0xFF;
 	}
@@ -311,7 +347,7 @@ protected:
 #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 	jmp_buf & error_handler_target() const { return png_object().jmpbuf; }
 #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-};
+}; // class libpng_image
 
 //------------------------------------------------------------------------------
 } // namespace gil

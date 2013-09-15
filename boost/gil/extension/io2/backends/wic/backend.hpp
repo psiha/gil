@@ -179,13 +179,13 @@ struct wic_view_data_t
         set_bitmapdata_for_view( view );
     }
 
-    WICRect      const * const p_roi_ ;
-    unsigned int         /*const*/ width_ ;
-    unsigned int         /*const*/ height_;
-    unsigned int         /*const*/ stride_;
+    WICRect      const *   const   p_roi_     ;
+    unsigned int         /*const*/ width_     ;
+    unsigned int         /*const*/ height_    ;
+    unsigned int         /*const*/ stride_    ;
     unsigned int         /*const*/ pixel_size_;
-    BYTE               * /*const*/ p_buffer_;
-    wic_format_t         const format_;
+    BYTE               * /*const*/ p_buffer_  ;
+    wic_format_t           const   format_    ;
 
 private:
     template <typename View>

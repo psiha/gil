@@ -44,16 +44,6 @@ class wic_image::native_writer
     public detail::configure_on_write_writer
 {
 public:
-    struct lib_object_t
-    {
-        detail::com_scoped_ptr<IWICBitmapFrameEncode>   p_frame_           ;
-        detail::com_scoped_ptr<IWICBitmapEncoder    >   p_encoder_         ;
-        IPropertyBag2                                 * p_frame_parameters_;
-    };
-
-    lib_object_t & lib_object() { return lib_object_; }
-
-public:
     native_writer( IStream & target, format_tag const format )
     {
         create_encoder( target, encoder_guid( format ) );
@@ -99,6 +89,17 @@ public:
     }
 
     void write( detail::wic_view_data_t const & view_data ) { write_default( view_data ); }
+
+public:
+    struct lib_object_t
+    {
+        detail::com_scoped_ptr<IWICBitmapFrameEncode>   p_frame_           ;
+        detail::com_scoped_ptr<IWICBitmapEncoder    >   p_encoder_         ;
+        IPropertyBag2                                 * p_frame_parameters_;
+    }; // struct lib_object_t
+
+    lib_object_t       & lib_object()       { return lib_object_; }
+    lib_object_t const & lib_object() const { return lib_object_; }
 
 private:
     void create_encoder( IStream & target, GUID const & format )

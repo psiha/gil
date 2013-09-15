@@ -30,7 +30,6 @@
 #include <boost/array.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/smart_ptr/scoped_array.hpp>
-
 //------------------------------------------------------------------------------
 namespace boost
 {
@@ -55,12 +54,12 @@ struct decompression_setup_data_t
     J_COLOR_SPACE         /*const*/ format_;
     JSAMPROW              /*const*/ buffer_;
     libjpeg_roi::offset_t /*const*/ offset_;
-};
+}; // struct decompression_setup_data_t
 
 struct view_data_t : decompression_setup_data_t
 {
     template <class View>
-    /*explicit*/ view_data_t( View const & view, libjpeg_roi::offset_t const offset = 0 )
+    explicit view_data_t( View const & view, libjpeg_roi::offset_t const offset = 0 )
         :
         decompression_setup_data_t
         (
@@ -82,7 +81,7 @@ struct view_data_t : decompression_setup_data_t
     unsigned int /*const*/ width_ ;
     unsigned int /*const*/ stride_;
     unsigned int           number_of_channels_;
-};
+}; // struct view_data_t
 
 //------------------------------------------------------------------------------
 } // namespace detail
@@ -99,54 +98,23 @@ class libjpeg_reader
     :
     public libjpeg_image
 {
-public:
-    format_t format() const { return decompressor().jpeg_color_space; }
-
-    format_t closest_gil_supported_format() const
-    {
-        format_t const current_format( format() );
-        #ifdef _DEBUG
-        switch ( current_format )
-        {
-            case JCS_RGB      :
-            case JCS_YCbCr    :
-            case JCS_CMYK     :
-            case JCS_YCCK     :
-            case JCS_GRAYSCALE:
-            case JCS_UNKNOWN  :
-                break;
-
-            default:
-                BOOST_ASSERT( !"Unknown format code." );
-        }
-        #endif
-
-        switch ( current_format )
-        {
-            case JCS_YCbCr: return JCS_RGB       ;
-            case JCS_YCCK : return JCS_CMYK      ;
-            default       : return current_format;
-        }
-    }
-
-    image_type_id current_image_format_id() const
-    {
-        return image_format_id( closest_gil_supported_format() );
-    }
-
- 
-    point2<std::ptrdiff_t> dimensions() const
+public: /// \ingroup Information
+    dimensions_t dimensions() const
     {
         // Implementation note:
         //   A user might have setup output image scaling through the low-level
-        // lib_object accessor.
+        // lib_object accessor or the scale_image() member function so we have
+        // to use the "output" dimensions.
         //                                    (17.10.2010.) (Domagoj Saric)
-        if ( dirty_output_dimensions_ )
-        {
-            jpeg_calc_output_dimensions( &const_cast<libjpeg_image &>( *this ).lib_object() );
-            dirty_output_dimensions_ = false;
-        }
-        return point2<std::ptrdiff_t>( decompressor().output_width, decompressor().output_height );
+        return dimensions_t( decompressor().output_width, decompressor().output_height );
+    }
+
+public: /// \ingroup Backend specific - transformation
+    void scale_image( unsigned int const scale_numerator, unsigned int const scale_denominator )
+    {
+        decompressor().scale_num   = scale_numerator  ;
+        decompressor().scale_denom = scale_denominator;
+        jpeg_calc_output_dimensions( &const_cast<libjpeg_image &>( *this ).lib_object() );
     }
 
 public: // Low-level (row, strip, tile) access
@@ -155,8 +123,8 @@ public: // Low-level (row, strip, tile) access
         read_scanline( p_row_storage );
     }
 
-    jpeg_decompress_struct       & lib_object()       { dirty_output_dimensions_ = true; return decompressor(); }
-    jpeg_decompress_struct const & lib_object() const {                                  return decompressor(); }
+    jpeg_decompress_struct       & lib_object()       { return decompressor(); }
+    jpeg_decompress_struct const & lib_object() const { return decompressor(); }
 
 public: /// \ingroup Construction
 	template <class Device>
@@ -164,10 +132,10 @@ public: /// \ingroup Construction
         :
         libjpeg_base( for_decompressor() )
     {
-        #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
-            if ( setjmp( libjpeg_base::error_handler_target() ) )
-                libjpeg_base::throw_jpeg_error();
-        #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+    #ifndef BOOST_GIL_THROW_THROUGH_C_SUPPORTED
+        if ( setjmp( libjpeg_base::error_handler_target() ) )
+            libjpeg_base::throw_jpeg_error();
+    #endif // BOOST_GIL_THROW_THROUGH_C_SUPPORTED
 
         setup_source( device );
 
@@ -436,8 +404,6 @@ private:
         decompressor().output_width  = decompressor().image_width ;
         decompressor().output_height = decompressor().image_height;
 
-        dirty_output_dimensions_ = false;
-
         detail::io_error_if( decompressor().data_precision != BITS_IN_JSAMPLE, "Unsupported image file data precision." );
     }
 
@@ -580,10 +546,9 @@ private:
     }
 
 private:
-    jpeg_source_mgr     source_manager_         ;
-    mutable bool        dirty_output_dimensions_;
-    array<JOCTET, 4096> read_buffer_            ;//...zzz...extract to a wrapper...not needed for in memory sources...
-};
+    jpeg_source_mgr     source_manager_;
+    array<JOCTET, 4096> read_buffer_   ;//...zzz...extract to a wrapper...not needed for in memory sources...
+}; // class libjpeg_reader
 
 #if defined( BOOST_MSVC )
 #   pragma warning( pop )
@@ -647,9 +612,4 @@ private:
 //------------------------------------------------------------------------------
 } // namespace boost
 //------------------------------------------------------------------------------
-
-#if defined( BOOST_MSVC )
-    #pragma warning( pop )
-#endif // MSVC
-
 #endif // reader_hpp

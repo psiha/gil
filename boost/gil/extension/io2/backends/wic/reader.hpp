@@ -5,7 +5,7 @@
 ///
 /// WIC reader.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2011.
+/// Copyright (c) Domagoj Saric 2010.-2013.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -62,28 +62,8 @@ class wic_image::native_reader
     public detail::backend_reader<wic_image>
 {
 public:
-    // Implementation note:
-    //   The IWICBitmapDecoder instance is not otherwise necessary once an
-    // IWICBitmapFrameDecode instance is created but we keep it here and make it
-    // accessible to the user to enable the use of multi frame/page/picture
-    // formats like GIF and TIFF.
-    //                                        (26.07.2010.) (Domagoj Saric)
-    typedef std::pair
-            <
-                detail::com_scoped_ptr<IWICBitmapFrameDecode>,
-                detail::com_scoped_ptr<IWICBitmapDecoder    >
-            > lib_object_t;
-
-public:
-    explicit native_reader( wchar_t const * const filename )
-    {
-        create_decoder_from_filename( filename );
-    }
-
-    explicit native_reader( char const * const filename )
-    {
-        create_decoder_from_filename( detail::wide_path( filename ) );
-    }
+    explicit native_reader( wchar_t const * const filename ) { create_decoder_from_filename(                    filename   ); }
+    explicit native_reader( char    const * const filename ) { create_decoder_from_filename( detail::wide_path( filename ) ); }
 
     // The passed IStream object must outlive the wic_image object (to support
     // lazy evaluation).
@@ -101,11 +81,13 @@ public:
         create_first_frame_decoder();
     }
 
-public:
-    point2<std::ptrdiff_t> dimensions() const
+public: /// \ingroup Information
+    typedef point2<UINT> dimensions_t;
+
+    dimensions_t dimensions() const
     {
         using namespace detail;
-        typedef point2<std::ptrdiff_t> result_t;
+        typedef dimensions_t result_t;
         aligned_storage<sizeof( result_t ), alignment_of<result_t>::value>::type placeholder;
         result_t & result( *gil_reinterpret_cast<result_t *>( placeholder.address() ) );
         BOOST_STATIC_ASSERT( sizeof( result_t::value_type ) == sizeof( UINT ) );
@@ -123,7 +105,7 @@ public:
 
     /*format_t*/WICPixelFormatGUID closest_gil_supported_format() const { return format(); }
 
-    image_type_id current_image_format_id() const
+    image_type_id_t current_image_format_id() const
     {
         return image_format_id( closest_gil_supported_format() );
     }
@@ -149,7 +131,7 @@ public: // Low-level (row, strip, tile) access
     private: friend wic_image;
         detail::wic_roi       roi_   ;
         UINT            const stride_;
-    };
+    }; // class sequential_row_read_state
 
     sequential_row_read_state begin_sequential_row_read() const { return sequential_row_read_state( *this ); }
 
@@ -169,7 +151,21 @@ public: // Low-level (row, strip, tile) access
         ++state.roi_.Y;
     }
 
-    lib_object_t & lib_object() { return lib_object_; }
+public:
+    // Implementation note:
+    //   The IWICBitmapDecoder instance is not otherwise necessary once an
+    // IWICBitmapFrameDecode instance is created but we keep it here and make it
+    // accessible to the user to enable the use of multi frame/page/picture
+    // formats like GIF and TIFF.
+    //                                        (26.07.2010.) (Domagoj Saric)
+    typedef std::pair
+            <
+                detail::com_scoped_ptr<IWICBitmapFrameDecode>,
+                detail::com_scoped_ptr<IWICBitmapDecoder    >
+            > lib_object_t;
+
+    lib_object_t       & lib_object()       { return lib_object_; }
+    lib_object_t const & lib_object() const { return lib_object_; }
 
 private: // Private formatted_image_base interface.
     friend class detail::backend_reader<wic_image>;

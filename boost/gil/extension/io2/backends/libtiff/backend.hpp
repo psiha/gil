@@ -408,10 +408,15 @@ protected:
 private:
     typedef detail::full_format_t full_format_t;
 
-public:
-    point2<uint32> dimensions() const
+public: /// \ingroup Information
+    typedef point2<uint32> dimensions_t;
+    dimensions_t dimensions() const
     {
-        return point2<uint32>( get_field<uint32>( TIFFTAG_IMAGEWIDTH ), get_field<uint32>( TIFFTAG_IMAGELENGTH ) );
+        return dimensions_t
+        (
+            get_field<uint32>( TIFFTAG_IMAGEWIDTH  ),
+            get_field<uint32>( TIFFTAG_IMAGELENGTH )
+        );
     }
 
 protected:
@@ -445,7 +450,7 @@ protected:
         return std::pair<T1, T2>( first, second );
     }
 
-    static std::size_t cached_format_size( backend_traits<libtiff_image>::format_t const format )
+    static unsigned int cached_format_size( backend_traits<libtiff_image>::format_t const format )
     {
         full_format_t::format_bitfield const & bits( reinterpret_cast<full_format_t const &>( format ).bits );
         return bits.bits_per_sample * ( ( bits.planar_configuration == PLANARCONFIG_CONTIG ) ? bits.samples_per_pixel : 1 ) / 8;
