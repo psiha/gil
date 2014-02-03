@@ -5,7 +5,7 @@
 ///
 /// Base IO interface GDI+ implementation.
 ///
-/// Copyright (c) 2010.-2013. Domagoj Saric
+/// Copyright (c) 2010 - 2014. Domagoj Saric
 ///
 ///  Use, modification and distribution is subject to the
 ///  Boost Software License, Version 1.0.

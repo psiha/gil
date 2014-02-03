@@ -3,7 +3,7 @@
 /// \file libpng/backend.hpp
 /// ------------------------
 ///
-/// Copyright (c) Domagoj Saric 2010.-2013.
+/// Copyright (c) Domagoj Saric 2010 - 2014.
 ///
 ///  Use, modification and distribution is subject to the
 ///  Boost Software License, Version 1.0.

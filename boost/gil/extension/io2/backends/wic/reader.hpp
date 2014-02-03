@@ -5,7 +5,7 @@
 ///
 /// WIC reader.
 ///
-/// Copyright (c) Domagoj Saric 2010.-2013.
+/// Copyright (c) Domagoj Saric 2010 - 2014.
 ///
 ///  Use, modification and distribution is subject to the Boost Software License, Version 1.0.
 ///  (See accompanying file LICENSE_1_0.txt or copy at
@@ -189,11 +189,11 @@ private: // Private formatted_image_base interface.
         verify_result( p_bitmap_lock->GetDataPointer( &buffer_size, &p_buffer ) );
         unsigned int stride;
         verify_result( p_bitmap_lock->GetStride( &stride ) );
-        #ifndef NDEBUG
-            WICPixelFormatGUID locked_format;
-            verify_result( p_bitmap_lock->GetPixelFormat( &locked_format ) );
-            BOOST_ASSERT(( locked_format == gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value ));
-        #endif
+    #ifndef NDEBUG
+        WICPixelFormatGUID locked_format;
+        verify_result( p_bitmap_lock->GetPixelFormat( &locked_format ) );
+        BOOST_ASSERT(( locked_format == gil_to_wic_format<typename View::value_type, is_planar<View>::value>::value ));
+    #endif
         copy_and_convert_pixels
         (
             interleaved_view
@@ -244,7 +244,7 @@ private: // Private formatted_image_base interface.
     }
 
 
-    static std::size_t cached_format_size( format_t const format )
+    static unsigned int cached_format_size( format_t const format )
     {
         using namespace detail;
         com_scoped_ptr<IWICComponentInfo> p_component_info;
@@ -272,17 +272,17 @@ private:
     void create_first_frame_decoder()
     {
         using namespace detail;
-        #ifndef NDEBUG
-            unsigned int frame_count;
-            verify_result( wic_decoder().GetFrameCount( &frame_count ) );
-            BOOST_ASSERT( frame_count >= 1 );
-        #endif // NDEBUG
+    #ifndef NDEBUG
+        unsigned int frame_count;
+        verify_result( wic_decoder().GetFrameCount( &frame_count ) );
+        BOOST_ASSERT( frame_count >= 1 );
+    #endif // NDEBUG
         ensure_result( wic_decoder().GetFrame( 0, &lib_object().first ) );
     }
 
 private:
     lib_object_t lib_object_;
-};
+}; // class wic_image::native_reader
 
 
 //------------------------------------------------------------------------------

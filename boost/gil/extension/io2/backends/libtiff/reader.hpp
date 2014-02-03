@@ -5,7 +5,7 @@
 ///
 /// LibTIFF reader
 ///
-/// Copyright (c) Domagoj Saric 2010.-2013.
+/// Copyright (c) Domagoj Saric 2010 - 2014.
 ///
 ///  Use, modification and distribution is subject to the
 ///  Boost Software License, Version 1.0.
@@ -321,13 +321,13 @@ private: // Private backend_base interface.
 
                     result.accumulate_equal
 					(
-						::TIFFReadEncodedTile
+						static_cast<unsigned int>( ::TIFFReadEncodedTile
 						(
 							&lib_object(),
 							current_tile,
 							setup.p_tile_buffer.get(),
 							setup.tile_size_bytes
-						),
+						)),
 						setup.tile_size_bytes
 					);
 

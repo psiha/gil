@@ -5,7 +5,7 @@
 ///
 /// LibTIFF backend.
 ///
-/// Copyright (c) 2010.-2013. Domagoj Saric
+/// Copyright (c) 2010- 2014. Domagoj Saric
 ///
 ///  Use, modification and distribution is subject to the
 ///  Boost Software License, Version 1.0.
@@ -29,7 +29,7 @@
 
 #ifdef BOOST_MPL_LIMIT_VECTOR_SIZE
 	#if BOOST_MPL_LIMIT_VECTOR_SIZE < 35
-		#error libtiff support requires mpl vectors of size 35 or greater...
+		#error LibTIFF support requires mpl vectors of size 35 or greater...
 	#endif
 #else
 	#define BOOST_MPL_LIMIT_VECTOR_SIZE 40
@@ -372,7 +372,7 @@ protected:
     }
 
     template <typename DeviceHandle>
-    explicit libtiff_image
+    libtiff_image
     (
         DeviceHandle const handle,
         TIFFReadWriteProc const read_proc,
@@ -397,6 +397,7 @@ protected:
             )
         )
     {
+        BOOST_STATIC_ASSERT( sizeof( handle ) <= sizeof( thandle_t ) );
         construction_check();
     }
 
